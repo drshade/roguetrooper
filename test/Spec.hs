@@ -1,8 +1,9 @@
 module Main where
 
-import RogueTrooper.Aim   (boxContains, nearestInBox, seekTurretBox)
-import RogueTrooper.Types (Box (..), BoxShape (..))
-import Raylib.Types       (Vector2, pattern Vector2)
+import RogueTrooper.Aim    (boxContains, nearestInBox, seekTurretBox)
+import RogueTrooper.Engine (stepAim)
+import RogueTrooper.Types  (Box (..), BoxShape (..), GameState (..))
+import Raylib.Types        (Vector2, pattern Vector2)
 import Test.Hspec
 
 -- | Assert two vectors are equal within a small tolerance.
@@ -58,3 +59,19 @@ main = hspec $ do
       nearestInBox box [(1 :: Int, Vector2 9 0), (2, Vector2 2 0)] `shouldBe` Just 2
     it "breaks ties by list order (earliest wins)" $
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
+
+  describe "stepAim" $ do
+    let gs = GameState
+               { turret    = Box (Vector2 0 0) (Circle 10)
+               , seekSpeed = 100
+               , tower     = Vector2 0 0
+               , towerHp   = 10
+               }
+    it "seeks the turret box toward the aim target by speed*dt" $
+      -- maxDistance = 100 * 0.1 = 10, target far at (100,0) -> turret moves to (10,0)
+      (stepAim 0.1 (Vector2 100 0) gs).turret.center `shouldBeCloseTo` Vector2 10 0
+    it "leaves seek speed, shape, tower and hp untouched" $ do
+      let gs' = stepAim 0.1 (Vector2 100 0) gs
+      gs'.seekSpeed `shouldBe` 100
+      gs'.turret.shape `shouldBe` Circle 10
+      gs'.towerHp `shouldBe` 10

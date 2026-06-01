@@ -27,6 +27,7 @@ library
     Prelude
     RogueTrooper
     RogueTrooper.Aim
+    RogueTrooper.Engine
     RogueTrooper.Types
 
   build-depends:

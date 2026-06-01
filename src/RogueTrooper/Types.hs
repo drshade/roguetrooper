@@ -2,6 +2,7 @@
 module RogueTrooper.Types
   ( BoxShape (..)
   , Box (..)
+  , GameState (..)
   ) where
 
 import Raylib.Types (Vector2)
@@ -17,5 +18,15 @@ data BoxShape
 data Box = Box
   { center :: Vector2
   , shape  :: BoxShape
+  }
+  deriving (Eq, Show)
+
+-- | The whole game simulation state. Grows as mechanics are added; currently
+-- just the turret box, its seek speed, and the defended tower.
+data GameState = GameState
+  { turret    :: Box      -- ^ @center@ = current turret-box position; @shape@ = its region
+  , seekSpeed :: Float    -- ^ units/sec the turret box seeks toward the aim box
+  , tower     :: Vector2  -- ^ the defended position
+  , towerHp   :: Int
   }
   deriving (Eq, Show)
