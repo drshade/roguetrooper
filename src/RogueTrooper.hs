@@ -42,8 +42,8 @@ initialState =
     , towerHp = 10
     , score   = 0
     , nextId  = 1
-    , spawnTimer    = 1.0
-    , spawnInterval = 2.5
+    , spawnTimer    = 0.5
+    , spawnInterval = 1.0
     , seed          = 12345
     }
 

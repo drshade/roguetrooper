@@ -12,6 +12,7 @@ module RogueTrooper.Script
   , ProjectileType (..)
   , ScriptF (..)
   , Script
+  , getDt
   , getAimPos
   , getMyPos
   , getMyId
@@ -41,7 +42,8 @@ data ProjectileType
 
 -- | The instruction set. Grows on demand as behaviours need new verbs.
 data ScriptF next
-  = GetAimPos (Vector2 -> next)               -- ^ query: current aim position (mouse)
+  = GetDt (Float -> next)                     -- ^ query: seconds elapsed this frame
+  | GetAimPos (Vector2 -> next)               -- ^ query: current aim position (mouse)
   | GetMyPos (Vector2 -> next)                -- ^ query: this entity's position
   | GetMyId (EntityId -> next)                -- ^ query: this entity's id
   | GetTowerPos (Vector2 -> next)             -- ^ query: the tower's position
@@ -56,6 +58,10 @@ data ScriptF next
 
 -- | A behaviour script: a free monad over 'ScriptF'.
 type Script = Free ScriptF
+
+-- | Query the seconds elapsed this frame.
+getDt :: Script Float
+getDt = liftF (GetDt id)
 
 -- | Query the current aim position (the mouse / aim box).
 getAimPos :: Script Vector2

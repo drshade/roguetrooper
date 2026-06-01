@@ -55,6 +55,7 @@ runEntityFrame world ent0 = go ent0 [] ent0.script
     go ent effs s = case s of
       Pure ()                       -> (ent { script = pure () }, reverse effs)
       Free (Yield next)             -> (ent { script = next }, reverse effs)
+      Free (GetDt k)                -> go ent effs (k world.dt)
       Free (GetAimPos k)            -> go ent effs (k world.aimTarget)
       Free (GetMyPos k)             -> go ent effs (k ent.box.center)
       Free (GetMyId k)              -> go ent effs (k ent.eid)

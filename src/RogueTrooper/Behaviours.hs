@@ -15,7 +15,8 @@ module RogueTrooper.Behaviours
 import Raylib.Types     (Vector2, pattern Vector2)
 import Raylib.Util.Math (vectorDistance, vectorNormalize, (|*), (|+|), (|-|))
 import RogueTrooper.Script (ProjectileType (..), Script, damage, despawnSelf, fire, getAimPos,
-                            getEnemies, getMyPos, getTargetInBox, getTowerPos, moveToward, yield)
+                            getDt, getEnemies, getMyPos, getTargetInBox, getTowerPos, moveToward,
+                            yield)
 
 -- | The y coordinate at which descending enemies are considered landed.
 -- (raylib screen coords: y grows downward.)
@@ -28,18 +29,27 @@ onLand (Vector2 _ y) = y >= groundLevel
 
 -- | The turret: every frame, move toward the current aim position, then yield.
 -- Purely reactive, expressed as a forever-loop over the DSL.
+-- | Seconds between turret shots (fire rate).
+fireInterval :: Float
+fireInterval = 0.18
+
 turretBehaviour :: Script ()
-turretBehaviour = forever $ do
-  aim <- getAimPos
-  moveToward aim
-  target <- getTargetInBox
-  case target of
-    Just (tp, tv) -> do
-      tower <- getTowerPos
-      let lead = predictLead tower tp tv bulletSpeed   -- aim where the target will be
-      fire tower (StraightBullet (farPoint tower lead))
-    Nothing -> pure ()                                 -- no target: hold fire
-  yield
+turretBehaviour = turret 0   -- cooldown carried in the continuation, starts ready
+  where
+    turret cooldown = do
+      aim <- getAimPos
+      moveToward aim
+      target <- getTargetInBox
+      cooldown' <- case target of
+        Just (tp, tv) | cooldown <= 0 -> do
+          tower <- getTowerPos
+          let lead = predictLead tower tp tv bulletSpeed  -- aim where the target will be
+          fire tower (StraightBullet (farPoint tower lead))
+          pure fireInterval                               -- reset cooldown after firing
+        _ -> pure cooldown                                -- no target or still cooling down
+      dt <- getDt
+      yield
+      turret (cooldown' - dt)                             -- tick the cooldown down
 
 -- | A point far along the ray from @from@ through @to@, so a straight bullet
 -- flies through its target rather than stopping on it.
