@@ -11,7 +11,7 @@ module RogueTrooper.Types
   ) where
 
 import Raylib.Types        (Vector2)
-import RogueTrooper.Script (Script)
+import RogueTrooper.Script (EntityId (..), ProjectileType (..), Script)
 
 -- | The shape of a targeting region, centred on its position.
 data BoxShape
@@ -27,11 +27,6 @@ data Box = Box
   }
   deriving (Eq, Show)
 
--- | A stable identity for an entity, so scripts can refer to specific targets
--- (e.g. a bullet emits @Damage thatEnemyId@).
-newtype EntityId = EntityId Int
-  deriving (Eq, Show)
-
 -- | A scripted actor in the world: the turret, every enemy, every bullet.
 -- @script@ is the entity's resumable behaviour continuation; the interpreter
 -- runs it each frame and stores the resumed continuation back.
@@ -41,13 +36,6 @@ data Entity = Entity
   , speed  :: Float      -- ^ units/sec for movement commands (seek/advance)
   , script :: Script ()  -- ^ resumable behaviour continuation
   }
-
--- | The kinds of projectile the turret can fire. Each variant carries the data
--- its behaviour needs (target point, target id, …) and drives both which
--- behaviour script it runs and how it is rendered.
-data ProjectileType
-  = StraightBullet Vector2   -- ^ flies toward a fixed aim point
-  deriving (Eq, Show)
 
 -- | A projectile in flight: its 'ProjectileType' (for rendering) plus the
 -- 'Entity' that carries its position and behaviour.

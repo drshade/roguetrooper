@@ -16,7 +16,7 @@ module RogueTrooper.Engine
 import Control.Monad.Free (Free (..))
 import Raylib.Types        (Vector2)
 import Raylib.Util.Math    (vectorDistance)
-import RogueTrooper.Aim    (seekToward)
+import RogueTrooper.Aim    (nearestInBox, seekToward)
 import RogueTrooper.Script (ScriptF (..))
 import RogueTrooper.Types
 
@@ -54,8 +54,17 @@ runEntityFrame world ent0 = go ent0 [] ent0.script
       Free (Yield next)             -> (ent { script = next }, reverse effs)
       Free (GetAimPos k)            -> go ent effs (k world.aimTarget)
       Free (GetMyPos k)             -> go ent effs (k ent.box.center)
+      Free (GetMyId k)              -> go ent effs (k ent.eid)
       Free (GetTowerPos k)          -> go ent effs (k world.towerPos)
+      Free (GetEnemies k)           -> go ent effs (k world.enemyList)
+      Free (GetTargetInBox k)       -> go ent effs (k (targetInBox ent.box world.enemyList))
       Free (MoveToward target next) -> go (moveEntity world.dt target ent) effs next
+      Free (Fire pt next)           -> go ent (Spawn pt ent.box.center : effs) next
+      Free (Hit tid next)           -> go ent (Damage tid : effs) next
+      Free (Expire tid next)        -> go ent (Despawn tid : effs) next
+
+    -- nearest enemy position inside a box (reusing the tested selector)
+    targetInBox b enemies = nearestInBox b [(p, p) | (_, p) <- enemies]
 
 -- | Fold a frame's emitted effects into the world: damage kills the named enemy
 -- (and scores), despawn removes the named entity, spawn adds an assembled bullet

@@ -1,7 +1,7 @@
 module Main where
 
 import RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import RogueTrooper.Behaviours (enemyBehaviour, groundLevel, turretBehaviour)
+import RogueTrooper.Behaviours (enemyBehaviour, groundLevel, straightBullet, turretBehaviour)
 import RogueTrooper.Engine     (World (..), applyEffects, resolveTowerHits, step)
 import RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..), Effect (..), Entity (..),
                                 EntityId (..), GameState (..), ProjectileType (..))
@@ -144,3 +144,34 @@ main = hspec $ do
       let gs' = applyEffects testBullet [Spawn (StraightBullet (Vector2 5 5)) (Vector2 0 0)] (mkGameState [] (Vector2 0 0) 10)
       length gs'.bullets `shouldBe` 1
       gs'.nextId `shouldBe` 101
+
+  describe "straightBullet" $ do
+    let enemyP        = Vector2 500 500
+        mkBulletAt p tgt =
+          Bullet (StraightBullet tgt)
+            (Entity { eid = EntityId 2, box = Box p (Circle 4), speed = 600, script = straightBullet tgt })
+        worldWith es = (testWorld 0.016 (Vector2 0 0) (Vector2 0 0)) { enemyList = es }
+    it "damages an enemy within range, scores, and despawns itself" $ do
+      let enemy = (mkEnemy enemyP) { eid = EntityId 1 }
+          gs    = (mkGameState [enemy] (Vector2 0 0) 10) { bullets = [mkBulletAt enemyP (Vector2 9999 500)] }
+          gs'   = step (worldWith [(EntityId 1, enemyP)]) gs
+      map (.eid) gs'.enemies `shouldBe` []
+      gs'.score `shouldBe` 1
+      length gs'.bullets `shouldBe` 0
+    it "despawns when it flies off-screen without hitting anything" $ do
+      let gs  = (mkGameState [] (Vector2 0 0) 10) { bullets = [mkBulletAt (Vector2 (-100) (-100)) (Vector2 (-9999) (-100))] }
+          gs' = step (worldWith []) gs
+      length gs'.bullets `shouldBe` 0
+
+  describe "turret firing" $ do
+    let turretE  = Entity { eid = EntityId 0, box = Box (Vector2 100 100) (Circle 60), speed = 320, script = turretBehaviour }
+        mkGs es  = (mkGameState es (Vector2 0 0) 10) { turret = turretE }
+        worldWith es = (testWorld 0.016 (Vector2 100 100) (Vector2 0 0)) { enemyList = es }
+    it "fires a projectile when an enemy is inside the turret box" $ do
+      let enemy = (mkEnemy (Vector2 110 110)) { eid = EntityId 1 }
+          gs'   = step (worldWith [(EntityId 1, Vector2 110 110)]) (mkGs [enemy])
+      length gs'.bullets `shouldBe` 1
+    it "holds fire when no enemy is in the box" $ do
+      let enemy = (mkEnemy (Vector2 900 900)) { eid = EntityId 1 }
+          gs'   = step (worldWith [(EntityId 1, Vector2 900 900)]) (mkGs [enemy])
+      length gs'.bullets `shouldBe` 0

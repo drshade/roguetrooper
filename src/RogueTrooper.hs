@@ -13,7 +13,8 @@ import           Raylib.Core.Text    (drawText)
 import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern Vector2)
 import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors  as Colors
-import           RogueTrooper.Behaviours (enemyBehaviour, turretBehaviour)
+import           RogueTrooper.Aim        (nearestInBox)
+import           RogueTrooper.Behaviours (enemyBehaviour, straightBullet, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..), Entity (..),
                                           EntityId (..), GameState (..), ProjectileType (..))
@@ -48,11 +49,12 @@ initialState =
     , nextId  = 2
     }
 
--- | Content-side projectile factory handed to the engine: assemble a bullet
--- entity from its type and origin. (The engine assigns the real id.)
+-- | Content-side projectile factory handed to the engine: map a 'ProjectileType'
+-- to an assembled bullet (its behaviour script + speed). The engine assigns the
+-- real id. This is the single registry of projectile types.
 mkBullet :: ProjectileType -> Vector2 -> Bullet
-mkBullet pt origin =
-  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (pure ()))
+mkBullet pt@(StraightBullet target) origin =
+  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (straightBullet target))
 
 runGame :: IO ()
 runGame =
@@ -73,8 +75,10 @@ frame gs = do
     mapM_ (renderBox Colors.red . (.box)) gs'.enemies
     mapM_ (renderBox Colors.gold . (.box) . (.entity)) gs'.bullets
     renderBox Colors.lime gs'.turret.box
+    renderLockOn gs'
     renderAimBox mouse
-    drawText "move mouse - turret box seeks the cursor" 20 (screenHeight - 36) 18 Colors.darkGray
+    drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
+    drawText "move mouse to aim - turret auto-fires at locked targets" 20 (screenHeight - 36) 18 Colors.darkGray
   pure gs'
 
 -- | Draw the targeting-region outline for a box, by shape.
@@ -96,6 +100,13 @@ renderAimBox m = do
   drawCircleLinesV m 14 Colors.rayWhite
   drawLineV (Vector2 (mx - k) my) (Vector2 (mx + k) my) Colors.rayWhite
   drawLineV (Vector2 mx (my - k)) (Vector2 mx (my + k)) Colors.rayWhite
+
+-- | Draw a lock-on marker on the enemy the turret is currently targeting.
+renderLockOn :: GameState -> IO ()
+renderLockOn gs =
+  case nearestInBox gs.turret.box [(e.box.center, e.box.center) | e <- gs.enemies] of
+    Just p  -> drawCircleLinesV p 20 Colors.yellow
+    Nothing -> pure ()
 
 -- | Draw the tower and its HP readout.
 renderTower :: GameState -> IO ()
