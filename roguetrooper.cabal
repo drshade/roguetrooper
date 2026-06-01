@@ -15,6 +15,7 @@ library
     NoFieldSelectors
     OverloadedRecordDot
     OverloadedStrings
+    PatternSynonyms
     RecordWildCards
     TemplateHaskell
     TypeApplications
@@ -25,6 +26,8 @@ library
   exposed-modules:
     Prelude
     RogueTrooper
+    RogueTrooper.Aim
+    RogueTrooper.Types
 
   build-depends:
     h-raylib,
@@ -41,6 +44,7 @@ executable roguetrooper
   default-extensions:
     OverloadedRecordDot
     OverloadedStrings
+    PatternSynonyms
 
   ghc-options:
     -Wall
@@ -51,6 +55,31 @@ executable roguetrooper
   build-depends:
     roguetrooper,
     rerebase,
+
+  mixins:
+    rerebase hiding (Prelude)
+
+test-suite roguetrooper-test
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Spec.hs
+  default-language: GHC2024
+  default-extensions:
+    OverloadedRecordDot
+    OverloadedStrings
+    PatternSynonyms
+
+  ghc-options:
+    -Wall
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    h-raylib,
+    hspec,
+    rerebase,
+    roguetrooper,
 
   mixins:
     rerebase hiding (Prelude)

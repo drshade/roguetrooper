@@ -101,6 +101,8 @@ fuller enemy roster / wave content may land in month 2.
 - **Must**: Cabal-based (no Stack, no hpack), `cabal-version: 2.4`, `default-language: GHC2024`.
 - **Must**: `rerebase` as the Prelude replacement using the custom `src/Prelude.hs` + `mixins` pattern; curated default-extensions set.
 - **Must**: `cabal build` and `cabal run` succeed from a clean checkout with documented prerequisites (ghcup-installed GHC/Cabal; raylib system dependency).
+- **Should**: Reuse `h-raylib`'s built-in math and collision rather than hand-rolling it: `Raylib.Util.Math` (`vectorMoveTowards` for finite-speed seek, `vectorLerp`, `lerp`, `clamp`, `remap`, the `Vector` typeclass and operators) and `Raylib.Core.Shapes` collision checks (`checkCollisionPointCircle`/`Rec`/`Poly`, `checkCollisionCircles`, `checkCollisionCircleRec`). These are pure values and need no tests of our own.
+- Note: there is no native point-in-ellipse; the oval-box upgrade is approximated by scaling the test point into circle-space or via `checkCollisionPointPoly`.
 
 ### Performance
 - **Must**: Sustain 60 FPS with ~200 simultaneous enemies plus their bullets and gems on the dev Mac.
@@ -114,6 +116,15 @@ fuller enemy roster / wave content may land in month 2.
 ### Input & Accessibility
 - **Should**: The core loop is fully playable mouse-only.
 - Key rebinding and broader accessibility passes are out of scope for the jam.
+
+### Testing
+Policy: **test the pure core, eyeball the rest** — the test pyramid applied honestly to a game. The 80%-coverage-everywhere default from the base standards is explicitly **not** adopted for this project; rendering and feel are not unit-tested.
+
+- **Must**: Pure game-specific logic has automated tests via a `test-suite` stanza (`hspec`). This covers: nearest-enemy-in-box selection (filter + min-distance + tie-break), box-shape → collision-check mapping (including the oval approximation), the eDSL interpreter and enemy state machine (parachute → land → advance), wave-schedule interpretation, upgrade stacking, and RNG determinism.
+- **Should**: For the fiddly geometry and seek/targeting logic, write the test first (it clarifies the contract); for the evolving eDSL surface, sketch-then-test is acceptable while the shape is being discovered.
+- **Must Not**: Write unit tests for `h-raylib` primitives (math, collision) — that is testing the library, not our code.
+- **Must Not**: Gate rendering, raylib `IO`, window lifecycle, or game-feel tuning (seek speed, fire rate, difficulty curve) behind unit tests — these are verified by running the game and observing.
+- High coverage is targeted on the pure modules only; there is no global coverage target.
 
 ## Acceptance Criteria
 
