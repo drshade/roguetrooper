@@ -1,0 +1,56 @@
+cabal-version: 2.4
+name:          roguetrooper
+version:       0.1.0.0
+build-type:    Simple
+synopsis:      Paratrooper x Vampire Survivors arcade roguelite (Haskell + Raylib)
+
+library
+  hs-source-dirs:   src
+  default-language: GHC2024
+  default-extensions:
+    DataKinds
+    DeriveGeneric
+    DuplicateRecordFields
+    GADTs
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+    RecordWildCards
+    TemplateHaskell
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+
+  ghc-options: -Wall
+  exposed-modules:
+    Prelude
+    RogueTrooper
+
+  build-depends:
+    h-raylib,
+    rerebase,
+
+  mixins:
+    rerebase (Prelude as RerebasePrelude),
+    rerebase hiding (Prelude)
+
+executable roguetrooper
+  hs-source-dirs:   app
+  main-is:          Main.hs
+  default-language: GHC2024
+  default-extensions:
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    roguetrooper,
+    rerebase,
+
+  mixins:
+    rerebase hiding (Prelude)
