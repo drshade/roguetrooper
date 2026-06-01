@@ -13,7 +13,7 @@ import           Raylib.Core.Text    (drawText)
 import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern Vector2)
 import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors  as Colors
-import           RogueTrooper.Behaviours (turretBehaviour)
+import           RogueTrooper.Behaviours (enemyBehaviour, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..), GameState (..))
 
@@ -31,7 +31,13 @@ initialState =
           , speed  = 320
           , script = turretBehaviour
           }
-    , enemies = []
+    , enemies =
+        [ Entity
+            { box    = Box (Vector2 300 0) (Circle 12)
+            , speed  = 80
+            , script = enemyBehaviour
+            }
+        ]
     , tower   = Vector2 640 660
     , towerHp = 10
     }
@@ -46,7 +52,7 @@ frame :: GameState -> IO GameState
 frame gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
-  let gs' = step (World dt mouse) gs
+  let gs' = step (World dt mouse gs.tower) gs
   drawing $ do
     clearBackground Colors.black
     renderTower gs'

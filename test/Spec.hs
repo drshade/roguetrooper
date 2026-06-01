@@ -1,8 +1,8 @@
 module Main where
 
 import RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import RogueTrooper.Behaviours (turretBehaviour)
-import RogueTrooper.Engine     (World (..), step)
+import RogueTrooper.Behaviours (enemyBehaviour, groundLevel, turretBehaviour)
+import RogueTrooper.Engine     (World (..), resolveTowerHits, step)
 import RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..), GameState (..))
 import Raylib.Types            (Vector2, pattern Vector2)
 import Test.Hspec
@@ -13,6 +13,14 @@ shouldBeCloseTo (Vector2 ax ay) (Vector2 bx by) =
   (abs (ax - bx) < eps && abs (ay - by) < eps) `shouldBe` True
   where
     eps = 1e-4
+
+-- | A turret that does nothing (so step leaves it untouched in enemy tests).
+noopTurret :: Entity
+noopTurret = Entity { box = Box (Vector2 0 0) (Circle 1), speed = 0, script = pure () }
+
+-- | An enemy at a position, running the real enemy behaviour.
+mkEnemy :: Vector2 -> Entity
+mkEnemy p = Entity { box = Box p (Circle 12), speed = 100, script = enemyBehaviour }
 
 main :: IO ()
 main = hspec $ do
@@ -68,7 +76,7 @@ main = hspec $ do
                 , tower   = Vector2 0 0
                 , towerHp = 10
                 }
-        world = World { dt = 0.1, aimTarget = Vector2 100 0 }
+        world = World { dt = 0.1, aimTarget = Vector2 100 0, towerPos = Vector2 0 0 }
     it "moves the turret box toward the aim position in one frame" $
       -- maxDistance = 100 * 0.1 = 10, aim far at (100,0) -> moves to (10,0).
       -- (That this terminates at all proves the script suspends at yield rather
@@ -83,3 +91,39 @@ main = hspec $ do
       g1.turret.speed `shouldBe` 100
       g1.turret.box.shape `shouldBe` Circle 10
       g1.towerHp `shouldBe` 10
+
+  describe "enemy script (parachute then advance)" $ do
+    let tower = Vector2 640 (groundLevel + 20)
+        world = World { dt = 0.1, aimTarget = Vector2 0 0, towerPos = tower }
+        afterStep p =
+          case (step world (GameState noopTurret [mkEnemy p] tower 10)).enemies of
+            (e : _) -> e.box.center
+            []      -> error "enemy unexpectedly removed"
+    it "descends straight down while airborne" $
+      -- well above ground: moves down (y up), x unchanged. speed*dt = 10.
+      afterStep (Vector2 300 (groundLevel - 200))
+        `shouldSatisfy` (\(Vector2 x y) -> x == 300 && y > groundLevel - 200)
+    it "advances toward the tower once landed" $
+      -- on the ground and left of the tower: moves right and down toward it.
+      afterStep (Vector2 300 (groundLevel + 10))
+        `shouldSatisfy` (\(Vector2 x y) -> x > 300 && y > groundLevel + 10)
+
+  describe "resolveTowerHits" $ do
+    let tower = Vector2 640 660
+        gsWith es = GameState noopTurret es tower 10
+    it "removes an enemy that reached the tower and deals 1 HP" $ do
+      let gs' = resolveTowerHits (gsWith [mkEnemy tower])
+      length gs'.enemies `shouldBe` 0
+      gs'.towerHp `shouldBe` 9
+    it "keeps a distant enemy and leaves HP unchanged" $ do
+      let gs' = resolveTowerHits (gsWith [mkEnemy (Vector2 300 100)])
+      length gs'.enemies `shouldBe` 1
+      gs'.towerHp `shouldBe` 10
+
+  describe "step (full frame)" $
+    it "removes an enemy that has reached the tower and deals 1 HP" $ do
+      let tower = Vector2 640 660
+          world = World 0.1 (Vector2 0 0) tower
+          gs'   = step world (GameState noopTurret [mkEnemy tower] tower 10)
+      length gs'.enemies `shouldBe` 0
+      gs'.towerHp `shouldBe` 9

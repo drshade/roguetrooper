@@ -10,19 +10,26 @@ module RogueTrooper.Engine
   ( World (..)
   , moveEntity
   , runEntityFrame
+  , resolveTowerHits
   , step
   ) where
 
 import Control.Monad.Free (Free (..))
-import Raylib.Types       (Vector2)
-import RogueTrooper.Aim   (seekToward)
-import RogueTrooper.Script (Script, ScriptF (..))
-import RogueTrooper.Types (Box (..), Entity (..), GameState (..))
+import Raylib.Types        (Vector2)
+import Raylib.Util.Math    (vectorDistance)
+import RogueTrooper.Aim    (seekToward)
+import RogueTrooper.Script (ScriptF (..))
+import RogueTrooper.Types  (Box (..), Entity (..), GameState (..))
+
+-- | An enemy within this distance of the tower counts as having reached it.
+towerHitRadius :: Float
+towerHitRadius = 28
 
 -- | Read-only per-frame context available to scripts via queries.
 data World = World
   { dt        :: Float    -- ^ seconds elapsed this frame
   , aimTarget :: Vector2  -- ^ current aim position (mouse)
+  , towerPos  :: Vector2  -- ^ the defended tower's position
   }
 
 -- | Carry out a @MoveToward@ command: move the entity's box toward @target@ by
@@ -44,13 +51,24 @@ runEntityFrame world ent0 = go ent0 ent0.script
       Pure ()                       -> ent { script = pure () }       -- finished; stays finished
       Free (Yield next)             -> ent { script = next }          -- frame boundary
       Free (GetAimPos k)            -> go ent (k world.aimTarget)      -- answer the query, continue
+      Free (GetMyPos k)             -> go ent (k ent.box.center)
+      Free (GetTowerPos k)          -> go ent (k world.towerPos)
       Free (MoveToward target next) -> go (moveEntity world.dt target ent) next
+
+-- | Remove enemies that have reached the tower, dealing 1 HP of tower damage
+-- per reaching enemy.
+resolveTowerHits :: GameState -> GameState
+resolveTowerHits gs = gs { enemies = survivors, towerHp = gs.towerHp - length hits }
+  where
+    (hits, survivors) = partition reached gs.enemies
+    reached e = vectorDistance e.box.center gs.tower <= towerHitRadius
 
 -- | Advance the whole simulation one frame: run the turret and every enemy
 -- through their scripts.
 step :: World -> GameState -> GameState
 step world gs =
-  gs
-    { turret  = runEntityFrame world gs.turret
-    , enemies = map (runEntityFrame world) gs.enemies
-    }
+  resolveTowerHits $
+    gs
+      { turret  = runEntityFrame world gs.turret
+      , enemies = map (runEntityFrame world) gs.enemies
+      }
