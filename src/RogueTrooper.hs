@@ -7,12 +7,13 @@ module RogueTrooper
   ) where
 
 import           Raylib.Core         (clearBackground, getFrameTime, getMousePosition)
-import           Raylib.Core.Shapes  (drawCircleLinesV, drawEllipseLines, drawLineV,
+import           Raylib.Core.Shapes  (drawCircleLinesV, drawEllipseLines, drawLineEx, drawLineV,
                                        drawRectangleLinesEx, drawRectangleV)
 import           Raylib.Core.Text    (drawText)
 import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern Vector2)
 import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors  as Colors
+import           Raylib.Util.Math    (vectorNormalize, (|*), (|+|), (|-|))
 import           RogueTrooper.Aim        (nearestInBox)
 import           RogueTrooper.Behaviours (enemyBehaviour, straightBullet, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
@@ -71,6 +72,7 @@ frame gs = do
       gs'       = step world gs
   drawing $ do
     clearBackground Colors.black
+    renderBarrel gs'.tower mouse
     renderTower gs'
     mapM_ (renderBox Colors.red . (.box)) gs'.enemies
     mapM_ (renderBox Colors.gold . (.box) . (.entity)) gs'.bullets
@@ -107,6 +109,12 @@ renderLockOn gs =
   case nearestInBox gs.turret.box [(e.box.center, e.box.center) | e <- gs.enemies] of
     Just p  -> drawCircleLinesV p 20 Colors.yellow
     Nothing -> pure ()
+
+-- | Draw the turret barrel: a thick stub from the tower pointing at the crosshair.
+renderBarrel :: Vector2 -> Vector2 -> IO ()
+renderBarrel tower aim =
+  let end = tower |+| (vectorNormalize (aim |-| tower) |* 48)
+   in drawLineEx tower end 8 Colors.darkGray
 
 -- | Draw the tower and its HP readout.
 renderTower :: GameState -> IO ()

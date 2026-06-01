@@ -59,7 +59,7 @@ runEntityFrame world ent0 = go ent0 [] ent0.script
       Free (GetEnemies k)           -> go ent effs (k world.enemyList)
       Free (GetTargetInBox k)       -> go ent effs (k (targetInBox ent.box world.enemyList))
       Free (MoveToward target next) -> go (moveEntity world.dt target ent) effs next
-      Free (Fire pt next)           -> go ent (Spawn pt ent.box.center : effs) next
+      Free (Fire origin pt next)    -> go ent (Spawn pt origin : effs) next
       Free (Hit tid next)           -> go ent (Damage tid : effs) next
       Free (Expire tid next)        -> go ent (Despawn tid : effs) next
 

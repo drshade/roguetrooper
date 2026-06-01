@@ -33,9 +33,9 @@ turretBehaviour = forever $ do
   target <- getTargetInBox
   case target of
     Just tp -> do
-      me <- getMyPos
-      fire (StraightBullet (farPoint me tp))   -- shoot a bullet through the target
-    Nothing -> pure ()                         -- no target: hold fire
+      tower <- getTowerPos
+      fire tower (StraightBullet (farPoint tower tp))  -- shoot from the tower through the target
+    Nothing -> pure ()                                 -- no target: hold fire
   yield
 
 -- | A point far along the ray from @from@ through @to@, so a straight bullet

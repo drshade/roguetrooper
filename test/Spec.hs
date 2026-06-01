@@ -164,13 +164,14 @@ main = hspec $ do
       length gs'.bullets `shouldBe` 0
 
   describe "turret firing" $ do
-    let turretE  = Entity { eid = EntityId 0, box = Box (Vector2 100 100) (Circle 60), speed = 320, script = turretBehaviour }
-        mkGs es  = (mkGameState es (Vector2 0 0) 10) { turret = turretE }
-        worldWith es = (testWorld 0.016 (Vector2 100 100) (Vector2 0 0)) { enemyList = es }
-    it "fires a projectile when an enemy is inside the turret box" $ do
+    let towerP   = Vector2 640 700
+        turretE  = Entity { eid = EntityId 0, box = Box (Vector2 100 100) (Circle 60), speed = 320, script = turretBehaviour }
+        mkGs es  = (mkGameState es towerP 10) { turret = turretE }
+        worldWith es = (testWorld 0.016 (Vector2 100 100) towerP) { enemyList = es }
+    it "fires a projectile from the tower when an enemy is inside the turret box" $ do
       let enemy = (mkEnemy (Vector2 110 110)) { eid = EntityId 1 }
           gs'   = step (worldWith [(EntityId 1, Vector2 110 110)]) (mkGs [enemy])
-      length gs'.bullets `shouldBe` 1
+      map (\b -> b.entity.box.center) gs'.bullets `shouldBe` [towerP]
     it "holds fire when no enemy is in the box" $ do
       let enemy = (mkEnemy (Vector2 900 900)) { eid = EntityId 1 }
           gs'   = step (worldWith [(EntityId 1, Vector2 900 900)]) (mkGs [enemy])
