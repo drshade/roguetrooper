@@ -15,7 +15,8 @@ import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors  as Colors
 import           RogueTrooper.Behaviours (enemyBehaviour, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
-import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..), GameState (..))
+import           RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..), Entity (..),
+                                          EntityId (..), GameState (..), ProjectileType (..))
 
 screenWidth, screenHeight, targetFps :: Int
 screenWidth = 1280
@@ -27,20 +28,31 @@ initialState =
   GameState
     { turret  =
         Entity
-          { box    = Box (Vector2 640 360) (Circle 60)
+          { eid    = EntityId 0
+          , box    = Box (Vector2 640 360) (Circle 60)
           , speed  = 320
           , script = turretBehaviour
           }
     , enemies =
         [ Entity
-            { box    = Box (Vector2 300 0) (Circle 12)
+            { eid    = EntityId 1
+            , box    = Box (Vector2 300 0) (Circle 12)
             , speed  = 80
             , script = enemyBehaviour
             }
         ]
+    , bullets = []
     , tower   = Vector2 640 660
     , towerHp = 10
+    , score   = 0
+    , nextId  = 2
     }
+
+-- | Content-side projectile factory handed to the engine: assemble a bullet
+-- entity from its type and origin. (The engine assigns the real id.)
+mkBullet :: ProjectileType -> Vector2 -> Bullet
+mkBullet pt origin =
+  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (pure ()))
 
 runGame :: IO ()
 runGame =
@@ -52,11 +64,14 @@ frame :: GameState -> IO GameState
 frame gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
-  let gs' = step (World dt mouse gs.tower) gs
+  let enemyList = map (\e -> (e.eid, e.box.center)) gs.enemies
+      world     = World dt mouse gs.tower enemyList mkBullet
+      gs'       = step world gs
   drawing $ do
     clearBackground Colors.black
     renderTower gs'
     mapM_ (renderBox Colors.red . (.box)) gs'.enemies
+    mapM_ (renderBox Colors.gold . (.box) . (.entity)) gs'.bullets
     renderBox Colors.lime gs'.turret.box
     renderAimBox mouse
     drawText "move mouse - turret box seeks the cursor" 20 (screenHeight - 36) 18 Colors.darkGray
