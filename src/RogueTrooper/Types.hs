@@ -5,7 +5,8 @@ module RogueTrooper.Types
   , GameState (..)
   ) where
 
-import Raylib.Types (Vector2)
+import Raylib.Types       (Vector2)
+import RogueTrooper.Script (Script)
 
 -- | The shape of a targeting region, centred on its position.
 data BoxShape
@@ -22,11 +23,16 @@ data Box = Box
   deriving (Eq, Show)
 
 -- | The whole game simulation state. Grows as mechanics are added; currently
--- just the turret box, its seek speed, and the defended tower.
+-- just the turret box, its seek speed, the defended tower, and the turret's
+-- live behaviour continuation.
+--
+-- No 'Eq'/'Show': 'turretScript' is a resumable continuation (a function), so
+-- the state is not comparable or showable as data. Tests assert on individual
+-- fields instead.
 data GameState = GameState
-  { turret    :: Box      -- ^ @center@ = current turret-box position; @shape@ = its region
-  , seekSpeed :: Float    -- ^ units/sec the turret box seeks toward the aim box
-  , tower     :: Vector2  -- ^ the defended position
-  , towerHp   :: Int
+  { turret       :: Box       -- ^ @center@ = current turret-box position; @shape@ = its region
+  , seekSpeed    :: Float     -- ^ units/sec the turret box seeks toward the aim box
+  , tower        :: Vector2   -- ^ the defended position
+  , towerHp      :: Int
+  , turretScript :: Script ()  -- ^ the turret's resumable behaviour continuation
   }
-  deriving (Eq, Show)

@@ -1,9 +1,10 @@
 module Main where
 
-import RogueTrooper.Aim    (boxContains, nearestInBox, seekTurretBox)
-import RogueTrooper.Engine (stepAim)
-import RogueTrooper.Types  (Box (..), BoxShape (..), GameState (..))
-import Raylib.Types        (Vector2, pattern Vector2)
+import RogueTrooper.Aim        (boxContains, nearestInBox, seekTurretBox)
+import RogueTrooper.Behaviours (turretBehaviour)
+import RogueTrooper.Engine     (ScriptInput (..), stepTurret)
+import RogueTrooper.Types      (Box (..), BoxShape (..), GameState (..))
+import Raylib.Types            (Vector2, pattern Vector2)
 import Test.Hspec
 
 -- | Assert two vectors are equal within a small tolerance.
@@ -60,18 +61,26 @@ main = hspec $ do
     it "breaks ties by list order (earliest wins)" $
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
 
-  describe "stepAim" $ do
-    let gs = GameState
-               { turret    = Box (Vector2 0 0) (Circle 10)
-               , seekSpeed = 100
-               , tower     = Vector2 0 0
-               , towerHp   = 10
-               }
-    it "seeks the turret box toward the aim target by speed*dt" $
-      -- maxDistance = 100 * 0.1 = 10, target far at (100,0) -> turret moves to (10,0)
-      (stepAim 0.1 (Vector2 100 0) gs).turret.center `shouldBeCloseTo` Vector2 10 0
+  describe "turret script (resumable Free-monad behaviour)" $ do
+    let gs0 = GameState
+                { turret       = Box (Vector2 0 0) (Circle 10)
+                , seekSpeed    = 100
+                , tower        = Vector2 0 0
+                , towerHp      = 10
+                , turretScript = turretBehaviour
+                }
+        input = ScriptInput { dt = 0.1, aimTarget = Vector2 100 0 }
+    it "seeks the turret box toward the aim position in one frame" $
+      -- maxDistance = 100 * 0.1 = 10, aim far at (100,0) -> moves to (10,0).
+      -- (That this terminates at all proves the script suspends at yield rather
+      -- than looping forever.)
+      (stepTurret input gs0).turret.center `shouldBeCloseTo` Vector2 10 0
+    it "resumes the continuation across frames, continuing to seek" $
+      let g1 = stepTurret input gs0   -- (0,0)  -> (10,0)
+          g2 = stepTurret input g1    -- (10,0) -> (20,0)
+       in g2.turret.center `shouldBeCloseTo` Vector2 20 0
     it "leaves seek speed, shape, tower and hp untouched" $ do
-      let gs' = stepAim 0.1 (Vector2 100 0) gs
-      gs'.seekSpeed `shouldBe` 100
-      gs'.turret.shape `shouldBe` Circle 10
-      gs'.towerHp `shouldBe` 10
+      let g1 = stepTurret input gs0
+      g1.seekSpeed `shouldBe` 100
+      g1.turret.shape `shouldBe` Circle 10
+      g1.towerHp `shouldBe` 10

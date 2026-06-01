@@ -27,10 +27,13 @@ library
     Prelude
     RogueTrooper
     RogueTrooper.Aim
+    RogueTrooper.Behaviours
     RogueTrooper.Engine
+    RogueTrooper.Script
     RogueTrooper.Types
 
   build-depends:
+    free,
     h-raylib,
     rerebase,
 
@@ -77,6 +80,7 @@ test-suite roguetrooper-test
     -with-rtsopts=-N
 
   build-depends:
+    free,
     h-raylib,
     hspec,
     rerebase,

@@ -13,8 +13,9 @@ import           Raylib.Core.Text    (drawText)
 import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern Vector2)
 import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors  as Colors
-import           RogueTrooper.Engine (stepAim)
-import           RogueTrooper.Types  (Box (..), BoxShape (..), GameState (..))
+import           RogueTrooper.Behaviours (turretBehaviour)
+import           RogueTrooper.Engine     (ScriptInput (..), stepTurret)
+import           RogueTrooper.Types      (Box (..), BoxShape (..), GameState (..))
 
 screenWidth, screenHeight, targetFps :: Int
 screenWidth = 1280
@@ -24,10 +25,11 @@ targetFps = 60
 initialState :: GameState
 initialState =
   GameState
-    { turret    = Box (Vector2 640 360) (Circle 60)
-    , seekSpeed = 320
-    , tower     = Vector2 640 660
-    , towerHp   = 10
+    { turret       = Box (Vector2 640 360) (Circle 60)
+    , seekSpeed    = 320
+    , tower        = Vector2 640 660
+    , towerHp      = 10
+    , turretScript = turretBehaviour
     }
 
 runGame :: IO ()
@@ -40,7 +42,7 @@ step :: GameState -> IO GameState
 step gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
-  let gs' = stepAim dt mouse gs
+  let gs' = stepTurret (ScriptInput dt mouse) gs
   drawing $ do
     clearBackground Colors.black
     renderTower gs'

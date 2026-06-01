@@ -86,12 +86,15 @@ fuller enemy roster / wave content may land in month 2.
 - **Must**: The run ends in a loss when tower HP reaches 0, and in a win when the final round is cleared.
 
 ### Authoring DSL (embedded)
-- **Must**: Enemy behaviours are authored as an embedded DSL decoupled from the engine (engine simulates; behaviour describes intent), using a per-tick coroutine that emits a fixed instruction vocabulary (robowars-style).
-- **Must**: The turret's seek / target / fire behaviour is authored as a behaviour script using the same pattern as enemies.
-- **Must**: Waves/rounds are authored as a declarative embedded DSL (a timeline of spawn directives with escalation), interpreted by the engine.
+The DSL is an embedded **free-monad** scripting language (`Script = Free ScriptF`) with three kinds of instruction: **queries** (read world state into the script, e.g. `getAimPos`), **commands** (ask the engine to act, e.g. `seekTo`), and **suspension** (`yield`, and later `wait`) so a script can describe behaviour spanning many frames. The engine interprets scripts, owning all physics/IO; scripts express only intent. (Inspired by the `~/repo/planets` free-monad scripting engine; chosen over a flat coroutine because queries + suspension let scripts decide based on live state and choreograph timed sequences.)
+
+- **Must**: Enemy behaviours are authored in this DSL, decoupled from the engine (engine simulates; behaviour describes intent).
+- **Must**: The turret's seek / target / fire behaviour is authored as a script in the same DSL.
+- **Must**: Waves/rounds are authored as scripts in the same DSL — a sequential timeline of spawn directives with waits and escalation (the primary motivation for suspension).
 - **Must**: Upgrades are authored as a data-shaped DSL (stat deltas / effect hooks).
-- **Should**: The DSL boundary (engine interprets; content describes intent) is built **upfront** — the first enemy and turret are authored behind it from the start, not as throwaway engine code to be extracted later. The robowars coroutine pattern (`Script = ScriptInput -> (Script, [Instruction])`) is the proven structural skeleton.
-- **Should**: The instruction vocabulary grows **minimally and on demand** — add a verb when an enemy/turret/wave actually needs it; do not speculatively design unused instructions. Expect the turret/aiming verbs (what engine→script feedback the box-targeting needs) to be the part most likely to move.
+- **Should**: Scripts run on a **resumable** model: each entity stores its current continuation; the interpreter runs it each frame until `yield`/`wait` (or completion) and resumes it next frame. A purely reactive entity loops `forever (… >> yield)`; a scripted sequence runs straight through with waits between steps.
+- **Should**: The DSL boundary (engine interprets; content describes intent) is built **upfront** — the turret and first enemy are authored behind it from the start, not as throwaway engine code extracted later.
+- **Should**: The instruction vocabulary grows **minimally and on demand** — add a verb (query, command, or suspension) when a behaviour actually needs it; do not speculatively design unused instructions. Expect the turret/targeting verbs and the wave-director `wait` family to be the parts most likely to be added next.
 - **Must Not**: Couple content authoring to engine internals (rendering, collision, raylib IO) such that adding a new enemy/wave/upgrade requires engine changes.
 
 ## Non-Functional Requirements
