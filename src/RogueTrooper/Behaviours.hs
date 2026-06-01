@@ -7,12 +7,12 @@ module RogueTrooper.Behaviours
   ( turretBehaviour
   ) where
 
-import RogueTrooper.Script (Script, getAimPos, seekTo, yield)
+import RogueTrooper.Script (Script, getAimPos, moveToward, yield)
 
--- | The turret: every frame, seek toward the current aim position, then yield.
+-- | The turret: every frame, move toward the current aim position, then yield.
 -- Purely reactive, expressed as a forever-loop over the DSL.
 turretBehaviour :: Script ()
 turretBehaviour = forever $ do
   aim <- getAimPos
-  seekTo aim
+  moveToward aim
   yield

@@ -14,8 +14,8 @@ import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern
 import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors  as Colors
 import           RogueTrooper.Behaviours (turretBehaviour)
-import           RogueTrooper.Engine     (ScriptInput (..), stepTurret)
-import           RogueTrooper.Types      (Box (..), BoxShape (..), GameState (..))
+import           RogueTrooper.Engine     (World (..), step)
+import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..), GameState (..))
 
 screenWidth, screenHeight, targetFps :: Int
 screenWidth = 1280
@@ -25,28 +25,33 @@ targetFps = 60
 initialState :: GameState
 initialState =
   GameState
-    { turret       = Box (Vector2 640 360) (Circle 60)
-    , seekSpeed    = 320
-    , tower        = Vector2 640 660
-    , towerHp      = 10
-    , turretScript = turretBehaviour
+    { turret  =
+        Entity
+          { box    = Box (Vector2 640 360) (Circle 60)
+          , speed  = 320
+          , script = turretBehaviour
+          }
+    , enemies = []
+    , tower   = Vector2 640 660
+    , towerHp = 10
     }
 
 runGame :: IO ()
 runGame =
   withWindow screenWidth screenHeight "RogueTrooper" targetFps $ \_ ->
-    whileWindowOpen_ step initialState
+    whileWindowOpen_ frame initialState
 
 -- | One frame: read input, advance the pure simulation, render.
-step :: GameState -> IO GameState
-step gs = do
+frame :: GameState -> IO GameState
+frame gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
-  let gs' = stepTurret (ScriptInput dt mouse) gs
+  let gs' = step (World dt mouse) gs
   drawing $ do
     clearBackground Colors.black
     renderTower gs'
-    renderBox Colors.lime gs'.turret
+    mapM_ (renderBox Colors.red . (.box)) gs'.enemies
+    renderBox Colors.lime gs'.turret.box
     renderAimBox mouse
     drawText "move mouse - turret box seeks the cursor" 20 (screenHeight - 36) 18 Colors.darkGray
   pure gs'

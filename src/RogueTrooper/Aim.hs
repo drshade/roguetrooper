@@ -4,7 +4,7 @@
 -- into game-specific behaviour.
 module RogueTrooper.Aim
   ( boxContains
-  , seekTurretBox
+  , seekToward
   , nearestInBox
   ) where
 
@@ -30,11 +30,12 @@ boxContains box point = case box.shape of
         dy = (py - cy) / ry
      in dx * dx + dy * dy <= 1
 
--- | Move the turret box toward the aim box at a finite speed.
--- Arguments: seek speed (units/sec), delta time (sec), current position, target.
-seekTurretBox :: Float -> Float -> Vector2 -> Vector2 -> Vector2
-seekTurretBox seekSpeed dt current target =
-  vectorMoveTowards current target (seekSpeed * dt)
+-- | Move a point toward a target at a finite speed, without overshooting.
+-- Used for any entity's locomotion (turret seek, enemy advance).
+-- Arguments: speed (units/sec), delta time (sec), current position, target.
+seekToward :: Float -> Float -> Vector2 -> Vector2 -> Vector2
+seekToward speed dt current target =
+  vectorMoveTowards current target (speed * dt)
 
 -- | The entity nearest the box centre among those inside the box, if any.
 -- Ties are broken by list order (earliest wins).

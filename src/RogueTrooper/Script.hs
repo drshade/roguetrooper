@@ -18,7 +18,7 @@ module RogueTrooper.Script
   ( ScriptF (..)
   , Script
   , getAimPos
-  , seekTo
+  , moveToward
   , yield
   ) where
 
@@ -27,9 +27,9 @@ import Raylib.Types       (Vector2)
 
 -- | The instruction set. Grows on demand as behaviours need new verbs.
 data ScriptF next
-  = GetAimPos (Vector2 -> next)  -- ^ query: the current aim position (mouse)
-  | SeekTo Vector2 next          -- ^ command: seek this entity's box toward a point
-  | Yield next                   -- ^ suspend until the next frame
+  = GetAimPos (Vector2 -> next)   -- ^ query: the current aim position (mouse)
+  | MoveToward Vector2 next       -- ^ command: move this entity's box toward a point at its speed
+  | Yield next                    -- ^ suspend until the next frame
   deriving (Functor)
 
 -- | A behaviour script: a free monad over 'ScriptF'.
@@ -39,9 +39,10 @@ type Script = Free ScriptF
 getAimPos :: Script Vector2
 getAimPos = liftF (GetAimPos id)
 
--- | Command the engine to seek this entity's box toward a point this frame.
-seekTo :: Vector2 -> Script ()
-seekTo target = liftF (SeekTo target ())
+-- | Command the engine to move this entity's box toward a point this frame
+-- (at the entity's own speed).
+moveToward :: Vector2 -> Script ()
+moveToward target = liftF (MoveToward target ())
 
 -- | Suspend the script until the next frame.
 yield :: Script ()

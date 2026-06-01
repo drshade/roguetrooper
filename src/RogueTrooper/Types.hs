@@ -2,6 +2,7 @@
 module RogueTrooper.Types
   ( BoxShape (..)
   , Box (..)
+  , Entity (..)
   , GameState (..)
   ) where
 
@@ -22,17 +23,23 @@ data Box = Box
   }
   deriving (Eq, Show)
 
--- | The whole game simulation state. Grows as mechanics are added; currently
--- just the turret box, its seek speed, the defended tower, and the turret's
--- live behaviour continuation.
+-- | A scripted actor in the world: the turret and every enemy are entities.
+-- @script@ is the entity's resumable behaviour continuation; the interpreter
+-- runs it each frame and stores the resumed continuation back.
+data Entity = Entity
+  { box    :: Box        -- ^ @center@ = current position; @shape@ = its region
+  , speed  :: Float      -- ^ units/sec for movement commands (seek/advance)
+  , script :: Script ()  -- ^ resumable behaviour continuation
+  }
+
+-- | The whole game simulation state. Grows as mechanics are added.
 --
--- No 'Eq'/'Show': 'turretScript' is a resumable continuation (a function), so
--- the state is not comparable or showable as data. Tests assert on individual
+-- No 'Eq'/'Show': entities hold resumable continuations (functions), so the
+-- state is neither comparable nor showable as data. Tests assert on individual
 -- fields instead.
 data GameState = GameState
-  { turret       :: Box       -- ^ @center@ = current turret-box position; @shape@ = its region
-  , seekSpeed    :: Float     -- ^ units/sec the turret box seeks toward the aim box
-  , tower        :: Vector2   -- ^ the defended position
-  , towerHp      :: Int
-  , turretScript :: Script ()  -- ^ the turret's resumable behaviour continuation
+  { turret  :: Entity    -- ^ the player's turret
+  , enemies :: [Entity]  -- ^ active enemies
+  , tower   :: Vector2   -- ^ the defended position
+  , towerHp :: Int
   }

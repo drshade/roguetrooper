@@ -2,48 +2,55 @@
 -- to the "RogueTrooper.Script" DSL: it answers queries from the current state,
 -- carries out commands (owning the physics), and suspends scripts at 'Yield',
 -- storing the continuation to resume next frame.
+--
+-- Scripts run in the context of a single 'Entity' (the one whose script is
+-- executing) plus a read-only 'World' of per-frame state. The same interpreter
+-- drives the turret and every enemy.
 module RogueTrooper.Engine
-  ( ScriptInput (..)
-  , seekTurretToward
-  , runFrame
-  , stepTurret
+  ( World (..)
+  , moveEntity
+  , runEntityFrame
+  , step
   ) where
 
 import Control.Monad.Free (Free (..))
 import Raylib.Types       (Vector2)
-import RogueTrooper.Aim   (seekTurretBox)
+import RogueTrooper.Aim   (seekToward)
 import RogueTrooper.Script (Script, ScriptF (..))
-import RogueTrooper.Types (Box (..), GameState (..))
+import RogueTrooper.Types (Box (..), Entity (..), GameState (..))
 
--- | The per-frame inputs available to scripts via queries.
-data ScriptInput = ScriptInput
+-- | Read-only per-frame context available to scripts via queries.
+data World = World
   { dt        :: Float    -- ^ seconds elapsed this frame
   , aimTarget :: Vector2  -- ^ current aim position (mouse)
   }
 
--- | Carry out a @SeekTo@ command: move the entity's box toward @target@ by
--- @seekSpeed * dt@. The engine owns this physics; the script only expresses the
--- intent to seek.
-seekTurretToward :: Float -> Vector2 -> GameState -> GameState
-seekTurretToward dt' target gs = gs { turret = t' }
+-- | Carry out a @MoveToward@ command: move the entity's box toward @target@ by
+-- @entity.speed * dt@. The engine owns this physics; the script only expresses
+-- the intent to move.
+moveEntity :: Float -> Vector2 -> Entity -> Entity
+moveEntity dt' target ent = ent { box = b' }
   where
-    t  = gs.turret
-    t' = t { center = seekTurretBox gs.seekSpeed dt' t.center target }
+    b  = ent.box
+    b' = b { center = seekToward ent.speed dt' b.center target }
 
--- | Run a script for one frame: execute queries and commands (threading game
--- state) until the script suspends at 'Yield' or finishes, returning the new
--- state and the continuation to resume next frame.
-runFrame :: ScriptInput -> GameState -> Script () -> (GameState, Script ())
-runFrame input = go
+-- | Run one entity's script for a single frame: execute queries and commands
+-- (updating the entity) until the script suspends at 'Yield' or finishes,
+-- returning the entity with its resumed continuation stored back.
+runEntityFrame :: World -> Entity -> Entity
+runEntityFrame world ent0 = go ent0 ent0.script
   where
-    go gs script = case script of
-      Pure ()                   -> (gs, pure ())                       -- finished; stays finished
-      Free (Yield next)         -> (gs, next)                          -- frame boundary
-      Free (GetAimPos k)        -> go gs (k input.aimTarget)           -- answer the query, continue
-      Free (SeekTo target next) -> go (seekTurretToward input.dt target gs) next
+    go ent script' = case script' of
+      Pure ()                       -> ent { script = pure () }       -- finished; stays finished
+      Free (Yield next)             -> ent { script = next }          -- frame boundary
+      Free (GetAimPos k)            -> go ent (k world.aimTarget)      -- answer the query, continue
+      Free (MoveToward target next) -> go (moveEntity world.dt target ent) next
 
--- | Advance the turret one frame by running its stored script continuation.
-stepTurret :: ScriptInput -> GameState -> GameState
-stepTurret input gs =
-  let (gs', resume) = runFrame input gs gs.turretScript
-   in gs' { turretScript = resume }
+-- | Advance the whole simulation one frame: run the turret and every enemy
+-- through their scripts.
+step :: World -> GameState -> GameState
+step world gs =
+  gs
+    { turret  = runEntityFrame world gs.turret
+    , enemies = map (runEntityFrame world) gs.enemies
+    }

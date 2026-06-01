@@ -1,9 +1,9 @@
 module Main where
 
-import RogueTrooper.Aim        (boxContains, nearestInBox, seekTurretBox)
+import RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
 import RogueTrooper.Behaviours (turretBehaviour)
-import RogueTrooper.Engine     (ScriptInput (..), stepTurret)
-import RogueTrooper.Types      (Box (..), BoxShape (..), GameState (..))
+import RogueTrooper.Engine     (World (..), step)
+import RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..), GameState (..))
 import Raylib.Types            (Vector2, pattern Vector2)
 import Test.Hspec
 
@@ -37,15 +37,15 @@ main = hspec $ do
         -- (3,1.5): (3/4)^2 + (1.5/2)^2 = 1.125 > 1
         boxContains (Box (Vector2 0 0) (Oval 4 2)) (Vector2 3 1.5) `shouldBe` False
 
-  describe "seekTurretBox" $ do
+  describe "seekToward" $ do
     it "moves toward the target by speed*dt when the target is far" $
       -- maxDistance = 10 * 0.3 = 3, so (0,0) -> (3,0)
-      seekTurretBox 10 0.3 (Vector2 0 0) (Vector2 10 0) `shouldBeCloseTo` Vector2 3 0
+      seekToward 10 0.3 (Vector2 0 0) (Vector2 10 0) `shouldBeCloseTo` Vector2 3 0
     it "clamps to the target without overshooting when within reach" $
       -- maxDistance = 100, target only 2 away -> snaps to target exactly
-      seekTurretBox 100 1 (Vector2 0 0) (Vector2 2 0) `shouldBe` Vector2 2 0
+      seekToward 100 1 (Vector2 0 0) (Vector2 2 0) `shouldBe` Vector2 2 0
     it "stays put when already at the target" $
-      seekTurretBox 10 0.1 (Vector2 5 5) (Vector2 5 5) `shouldBe` Vector2 5 5
+      seekToward 10 0.1 (Vector2 5 5) (Vector2 5 5) `shouldBe` Vector2 5 5
 
   describe "nearestInBox" $ do
     let box = Box (Vector2 0 0) (Circle 5)
@@ -61,26 +61,25 @@ main = hspec $ do
     it "breaks ties by list order (earliest wins)" $
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
 
-  describe "turret script (resumable Free-monad behaviour)" $ do
+  describe "turret script (resumable, entity interpreter)" $ do
     let gs0 = GameState
-                { turret       = Box (Vector2 0 0) (Circle 10)
-                , seekSpeed    = 100
-                , tower        = Vector2 0 0
-                , towerHp      = 10
-                , turretScript = turretBehaviour
+                { turret  = Entity { box = Box (Vector2 0 0) (Circle 10), speed = 100, script = turretBehaviour }
+                , enemies = []
+                , tower   = Vector2 0 0
+                , towerHp = 10
                 }
-        input = ScriptInput { dt = 0.1, aimTarget = Vector2 100 0 }
-    it "seeks the turret box toward the aim position in one frame" $
+        world = World { dt = 0.1, aimTarget = Vector2 100 0 }
+    it "moves the turret box toward the aim position in one frame" $
       -- maxDistance = 100 * 0.1 = 10, aim far at (100,0) -> moves to (10,0).
       -- (That this terminates at all proves the script suspends at yield rather
       -- than looping forever.)
-      (stepTurret input gs0).turret.center `shouldBeCloseTo` Vector2 10 0
-    it "resumes the continuation across frames, continuing to seek" $
-      let g1 = stepTurret input gs0   -- (0,0)  -> (10,0)
-          g2 = stepTurret input g1    -- (10,0) -> (20,0)
-       in g2.turret.center `shouldBeCloseTo` Vector2 20 0
-    it "leaves seek speed, shape, tower and hp untouched" $ do
-      let g1 = stepTurret input gs0
-      g1.seekSpeed `shouldBe` 100
-      g1.turret.shape `shouldBe` Circle 10
+      (step world gs0).turret.box.center `shouldBeCloseTo` Vector2 10 0
+    it "resumes the continuation across frames, continuing to move" $
+      let g1 = step world gs0   -- (0,0)  -> (10,0)
+          g2 = step world g1    -- (10,0) -> (20,0)
+       in g2.turret.box.center `shouldBeCloseTo` Vector2 20 0
+    it "leaves speed, shape, tower and hp untouched" $ do
+      let g1 = step world gs0
+      g1.turret.speed `shouldBe` 100
+      g1.turret.box.shape `shouldBe` Circle 10
       g1.towerHp `shouldBe` 10
