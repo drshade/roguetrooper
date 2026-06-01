@@ -1,7 +1,7 @@
 module Main where
 
 import RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import RogueTrooper.Behaviours (enemyBehaviour, groundLevel, straightBullet, turretBehaviour)
+import RogueTrooper.Behaviours (enemyBehaviour, groundLevel, predictLead, straightBullet, turretBehaviour)
 import RogueTrooper.Engine     (World (..), applyEffects, resolveTowerHits, spawnTick, step)
 import RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..), Effect (..), Entity (..),
                                 EntityId (..), GameState (..), ProjectileType (..))
@@ -17,11 +17,11 @@ shouldBeCloseTo (Vector2 ax ay) (Vector2 bx by) =
 
 -- | A turret that does nothing (so step leaves it untouched in enemy tests).
 noopTurret :: Entity
-noopTurret = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 1), speed = 0, script = pure () }
+noopTurret = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 1), speed = 0, vel = Vector2 0 0, script = pure () }
 
 -- | An enemy at a position, running the real enemy behaviour.
 mkEnemy :: Vector2 -> Entity
-mkEnemy p = Entity { eid = EntityId 9, box = Box p (Circle 12), speed = 100, script = enemyBehaviour }
+mkEnemy p = Entity { eid = EntityId 9, box = Box p (Circle 12), speed = 100, vel = Vector2 0 0, script = enemyBehaviour }
 
 -- | A minimal game state with the given enemies, tower position, and HP.
 -- Spawn timer is parked high so steps don't spawn unless a test lowers it.
@@ -32,11 +32,11 @@ mkGameState es towerP hp =
 
 -- | A trivial projectile factory for tests (inert bullet).
 testBullet :: ProjectileType -> Vector2 -> Bullet
-testBullet pt origin = Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (pure ()))
+testBullet pt origin = Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (Vector2 0 0) (pure ()))
 
 -- | An enemy factory for tests.
 testEnemy :: Vector2 -> Entity
-testEnemy pos = Entity { eid = EntityId 0, box = Box pos (Circle 12), speed = 80, script = enemyBehaviour }
+testEnemy pos = Entity { eid = EntityId 0, box = Box pos (Circle 12), speed = 80, vel = Vector2 0 0, script = enemyBehaviour }
 
 -- | A world with the given dt, aim, and tower; no visible enemies.
 testWorld :: Float -> Vector2 -> Vector2 -> World
@@ -88,7 +88,7 @@ main = hspec $ do
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
 
   describe "turret script (resumable, entity interpreter)" $ do
-    let turretE = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 10), speed = 100, script = turretBehaviour }
+    let turretE = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 10), speed = 100, vel = Vector2 0 0, script = turretBehaviour }
         gs0     = (mkGameState [] (Vector2 0 0) 10) { turret = turretE }
         world   = testWorld 0.1 (Vector2 100 0) (Vector2 0 0)
     it "moves the turret box toward the aim position in one frame" $
@@ -156,12 +156,12 @@ main = hspec $ do
     let enemyP        = Vector2 500 500
         mkBulletAt p tgt =
           Bullet (StraightBullet tgt)
-            (Entity { eid = EntityId 2, box = Box p (Circle 4), speed = 600, script = straightBullet tgt })
+            (Entity { eid = EntityId 2, box = Box p (Circle 4), speed = 600, vel = Vector2 0 0, script = straightBullet tgt })
         worldWith es = (testWorld 0.016 (Vector2 0 0) (Vector2 0 0)) { enemyList = es }
     it "damages an enemy within range, scores, and despawns itself" $ do
       let enemy = (mkEnemy enemyP) { eid = EntityId 1 }
           gs    = (mkGameState [enemy] (Vector2 0 0) 10) { bullets = [mkBulletAt enemyP (Vector2 9999 500)] }
-          gs'   = step (worldWith [(EntityId 1, enemyP)]) gs
+          gs'   = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
       map (.eid) gs'.enemies `shouldBe` []
       gs'.score `shouldBe` 1
       length gs'.bullets `shouldBe` 0
@@ -177,12 +177,21 @@ main = hspec $ do
         worldWith es = (testWorld 0.016 (Vector2 100 100) towerP) { enemyList = es }
     it "fires a projectile from the tower when an enemy is inside the turret box" $ do
       let enemy = (mkEnemy (Vector2 110 110)) { eid = EntityId 1 }
-          gs'   = step (worldWith [(EntityId 1, Vector2 110 110)]) (mkGs [enemy])
+          gs'   = step (worldWith [(EntityId 1, Vector2 110 110, Vector2 0 0)]) (mkGs [enemy])
       map (\b -> b.entity.box.center) gs'.bullets `shouldBe` [towerP]
     it "holds fire when no enemy is in the box" $ do
       let enemy = (mkEnemy (Vector2 900 900)) { eid = EntityId 1 }
-          gs'   = step (worldWith [(EntityId 1, Vector2 900 900)]) (mkGs [enemy])
+          gs'   = step (worldWith [(EntityId 1, Vector2 900 900, Vector2 0 0)]) (mkGs [enemy])
       length gs'.bullets `shouldBe` 0
+
+  describe "predictLead" $ do
+    it "aims at the target's current position when it is stationary" $
+      predictLead (Vector2 0 0) (Vector2 100 0) (Vector2 0 0) 100 `shouldBeCloseTo` Vector2 100 0
+    it "leads along the target's velocity by the bullet travel time" $
+      -- tower (0,0), target (100,0) moving down at 50, bullet speed 100:
+      -- travel ~1s, so aim ~ (100, 50+)
+      predictLead (Vector2 0 0) (Vector2 100 0) (Vector2 0 50) 100
+        `shouldSatisfy` (\(Vector2 x y) -> x == 100 && y > 45 && y < 65)
 
   describe "spawnTick (periodic enemy spawning)" $ do
     let world = testWorld 0.1 (Vector2 0 0) (Vector2 0 0)

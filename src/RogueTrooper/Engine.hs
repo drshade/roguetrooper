@@ -16,7 +16,7 @@ module RogueTrooper.Engine
 
 import Control.Monad.Free (Free (..))
 import Raylib.Types        (Vector2, pattern Vector2)
-import Raylib.Util.Math    (vectorDistance)
+import Raylib.Util.Math    (vectorDistance, (|*), (|-|))
 import RogueTrooper.Aim    (nearestInBox, seekToward)
 import RogueTrooper.Script (ScriptF (..))
 import RogueTrooper.Types
@@ -31,7 +31,7 @@ data World = World
   { dt           :: Float                              -- ^ seconds elapsed this frame
   , aimTarget    :: Vector2                            -- ^ current aim position (mouse)
   , towerPos     :: Vector2                            -- ^ the defended tower's position
-  , enemyList    :: [(EntityId, Vector2)]              -- ^ enemies visible to scripts
+  , enemyList    :: [(EntityId, Vector2, Vector2)]     -- ^ enemies visible to scripts (id, pos, velocity)
   , mkProjectile :: ProjectileType -> Vector2 -> Bullet -- ^ content factory: type + origin -> bullet
   , mkEnemy      :: Vector2 -> Entity                  -- ^ content factory: position -> enemy
   }
@@ -39,10 +39,11 @@ data World = World
 -- | Carry out a movement: move the entity's box toward @target@ by
 -- @entity.speed * dt@.
 moveEntity :: Float -> Vector2 -> Entity -> Entity
-moveEntity dt' target ent = ent { box = b' }
+moveEntity dt' target ent = ent { box = b' { center = newCenter }, vel = v }
   where
-    b  = ent.box
-    b' = b { center = seekToward ent.speed dt' b.center target }
+    b'        = ent.box
+    newCenter = seekToward ent.speed dt' b'.center target
+    v         = if dt' <= 0 then Vector2 0 0 else (newCenter |-| b'.center) |* (1 / dt')
 
 -- | Run one entity's script for a single frame: execute queries and movement
 -- (updating the entity) and accumulate emitted 'Effect's until the script
@@ -58,15 +59,15 @@ runEntityFrame world ent0 = go ent0 [] ent0.script
       Free (GetMyPos k)             -> go ent effs (k ent.box.center)
       Free (GetMyId k)              -> go ent effs (k ent.eid)
       Free (GetTowerPos k)          -> go ent effs (k world.towerPos)
-      Free (GetEnemies k)           -> go ent effs (k world.enemyList)
+      Free (GetEnemies k)           -> go ent effs (k [(i, p) | (i, p, _) <- world.enemyList])
       Free (GetTargetInBox k)       -> go ent effs (k (targetInBox ent.box world.enemyList))
       Free (MoveToward target next) -> go (moveEntity world.dt target ent) effs next
       Free (Fire origin pt next)    -> go ent (Spawn pt origin : effs) next
       Free (Hit tid next)           -> go ent (Damage tid : effs) next
       Free (Expire tid next)        -> go ent (Despawn tid : effs) next
 
-    -- nearest enemy position inside a box (reusing the tested selector)
-    targetInBox b enemies = nearestInBox b [(p, p) | (_, p) <- enemies]
+    -- nearest enemy (position + velocity) inside a box (reusing the tested selector)
+    targetInBox b enemies = nearestInBox b [((p, v), p) | (_, p, v) <- enemies]
 
 -- | Fold a frame's emitted effects into the world: damage kills the named enemy
 -- (and scores), despawn removes the named entity, spawn adds an assembled bullet

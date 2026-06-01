@@ -34,6 +34,7 @@ data Entity = Entity
   { eid    :: EntityId   -- ^ stable identity
   , box    :: Box        -- ^ @center@ = current position; @shape@ = its region
   , speed  :: Float      -- ^ units/sec for movement commands (seek/advance)
+  , vel    :: Vector2    -- ^ last frame's velocity (units/sec), set by the engine on move
   , script :: Script ()  -- ^ resumable behaviour continuation
   }
 

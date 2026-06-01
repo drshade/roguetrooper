@@ -7,6 +7,8 @@ module RogueTrooper.Behaviours
   ( turretBehaviour
   , enemyBehaviour
   , straightBullet
+  , predictLead
+  , bulletSpeed
   , groundLevel
   ) where
 
@@ -32,9 +34,10 @@ turretBehaviour = forever $ do
   moveToward aim
   target <- getTargetInBox
   case target of
-    Just tp -> do
+    Just (tp, tv) -> do
       tower <- getTowerPos
-      fire tower (StraightBullet (farPoint tower tp))  -- shoot from the tower through the target
+      let lead = predictLead tower tp tv bulletSpeed   -- aim where the target will be
+      fire tower (StraightBullet (farPoint tower lead))
     Nothing -> pure ()                                 -- no target: hold fire
   yield
 
@@ -45,10 +48,23 @@ farPoint from to
   | vectorDistance from to < 1 = from |+| Vector2 0 (-5000)   -- degenerate: aim up
   | otherwise                  = from |+| (vectorNormalize (to |-| from) |* 5000)
 
--- | Radius within which a straight bullet counts as hitting an enemy. Generous
--- enough that fast bullets don't tunnel past a target between frames.
+-- | Radius within which a straight bullet counts as hitting an enemy.
 bulletHitRadius :: Float
-bulletHitRadius = 22
+bulletHitRadius = 18
+
+-- | Speed of fired bullets. Shared by the turret's lead calculation and the
+-- projectile factory so they stay in sync.
+bulletSpeed :: Float
+bulletSpeed = 900
+
+-- | Predict where to aim to hit a moving target: the intercept point given the
+-- bullet's travel time. Two fixed-point iterations refine the estimate.
+predictLead :: Vector2 -> Vector2 -> Vector2 -> Float -> Vector2
+predictLead origin pos vel speed = pos |+| (vel |* travelTime)
+  where
+    t1         = vectorDistance origin pos / speed
+    p1         = pos |+| (vel |* t1)
+    travelTime = vectorDistance origin p1 / speed
 
 -- | Is a position outside the (margin-padded) screen?
 offScreen :: Vector2 -> Bool

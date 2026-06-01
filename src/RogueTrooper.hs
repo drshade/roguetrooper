@@ -15,7 +15,7 @@ import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors  as Colors
 import           Raylib.Util.Math    (vectorNormalize, (|*), (|+|), (|-|))
 import           RogueTrooper.Aim        (nearestInBox)
-import           RogueTrooper.Behaviours (enemyBehaviour, straightBullet, turretBehaviour)
+import           RogueTrooper.Behaviours (bulletSpeed, enemyBehaviour, straightBullet, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..), Entity (..),
                                           EntityId (..), GameState (..), ProjectileType (..))
@@ -33,6 +33,7 @@ initialState =
           { eid    = EntityId 0
           , box    = Box (Vector2 640 360) (Circle 60)
           , speed  = 320
+          , vel    = Vector2 0 0
           , script = turretBehaviour
           }
     , enemies = []   -- populated by the spawner
@@ -51,11 +52,11 @@ initialState =
 -- real id. This is the single registry of projectile types.
 mkBullet :: ProjectileType -> Vector2 -> Bullet
 mkBullet pt@(StraightBullet target) origin =
-  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 2000 (straightBullet target))
+  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) bulletSpeed (Vector2 0 0) (straightBullet target))
 
 -- | Content-side enemy factory handed to the engine's spawner.
 spawnEnemy :: Vector2 -> Entity
-spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) 80 enemyBehaviour
+spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) 80 (Vector2 0 0) enemyBehaviour
 
 runGame :: IO ()
 runGame =
@@ -67,7 +68,7 @@ frame :: GameState -> IO GameState
 frame gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
-  let enemyList = map (\e -> (e.eid, e.box.center)) gs.enemies
+  let enemyList = map (\e -> (e.eid, e.box.center, e.vel)) gs.enemies
       world     = World dt mouse gs.tower enemyList mkBullet spawnEnemy
       gs'       = step world gs
   drawing $ do

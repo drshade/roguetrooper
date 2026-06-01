@@ -46,7 +46,7 @@ data ScriptF next
   | GetMyId (EntityId -> next)                -- ^ query: this entity's id
   | GetTowerPos (Vector2 -> next)             -- ^ query: the tower's position
   | GetEnemies ([(EntityId, Vector2)] -> next) -- ^ query: all enemies (id + position)
-  | GetTargetInBox (Maybe Vector2 -> next)    -- ^ query: nearest enemy inside MY box
+  | GetTargetInBox (Maybe (Vector2, Vector2) -> next) -- ^ query: nearest enemy in MY box (pos, velocity)
   | MoveToward Vector2 next                   -- ^ command: move my box toward a point at my speed
   | Fire Vector2 ProjectileType next          -- ^ effect: spawn a projectile from a given origin
   | Hit EntityId next                         -- ^ effect: damage the named enemy
@@ -77,8 +77,9 @@ getTowerPos = liftF (GetTowerPos id)
 getEnemies :: Script [(EntityId, Vector2)]
 getEnemies = liftF (GetEnemies id)
 
--- | Query the position of the nearest enemy inside this entity's own box, if any.
-getTargetInBox :: Script (Maybe Vector2)
+-- | Query the position and velocity of the nearest enemy inside this entity's
+-- own box, if any.
+getTargetInBox :: Script (Maybe (Vector2, Vector2))
 getTargetInBox = liftF (GetTargetInBox id)
 
 -- | Command the engine to move this entity's box toward a point this frame
