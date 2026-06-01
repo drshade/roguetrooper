@@ -35,19 +35,15 @@ initialState =
           , speed  = 320
           , script = turretBehaviour
           }
-    , enemies =
-        [ Entity
-            { eid    = EntityId 1
-            , box    = Box (Vector2 300 0) (Circle 12)
-            , speed  = 80
-            , script = enemyBehaviour
-            }
-        ]
+    , enemies = []   -- populated by the spawner
     , bullets = []
     , tower   = Vector2 640 660
     , towerHp = 10
     , score   = 0
-    , nextId  = 2
+    , nextId  = 1
+    , spawnTimer    = 1.0
+    , spawnInterval = 2.5
+    , seed          = 12345
     }
 
 -- | Content-side projectile factory handed to the engine: map a 'ProjectileType'
@@ -56,6 +52,10 @@ initialState =
 mkBullet :: ProjectileType -> Vector2 -> Bullet
 mkBullet pt@(StraightBullet target) origin =
   Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (straightBullet target))
+
+-- | Content-side enemy factory handed to the engine's spawner.
+spawnEnemy :: Vector2 -> Entity
+spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) 80 enemyBehaviour
 
 runGame :: IO ()
 runGame =
@@ -68,7 +68,7 @@ frame gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
   let enemyList = map (\e -> (e.eid, e.box.center)) gs.enemies
-      world     = World dt mouse gs.tower enemyList mkBullet
+      world     = World dt mouse gs.tower enemyList mkBullet spawnEnemy
       gs'       = step world gs
   drawing $ do
     clearBackground Colors.black

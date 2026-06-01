@@ -2,7 +2,7 @@ module Main where
 
 import RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
 import RogueTrooper.Behaviours (enemyBehaviour, groundLevel, straightBullet, turretBehaviour)
-import RogueTrooper.Engine     (World (..), applyEffects, resolveTowerHits, step)
+import RogueTrooper.Engine     (World (..), applyEffects, resolveTowerHits, spawnTick, step)
 import RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..), Effect (..), Entity (..),
                                 EntityId (..), GameState (..), ProjectileType (..))
 import Raylib.Types            (Vector2, pattern Vector2)
@@ -24,18 +24,25 @@ mkEnemy :: Vector2 -> Entity
 mkEnemy p = Entity { eid = EntityId 9, box = Box p (Circle 12), speed = 100, script = enemyBehaviour }
 
 -- | A minimal game state with the given enemies, tower position, and HP.
+-- Spawn timer is parked high so steps don't spawn unless a test lowers it.
 mkGameState :: [Entity] -> Vector2 -> Int -> GameState
 mkGameState es towerP hp =
-  GameState { turret = noopTurret, enemies = es, bullets = [], tower = towerP, towerHp = hp, score = 0, nextId = 100 }
+  GameState { turret = noopTurret, enemies = es, bullets = [], tower = towerP, towerHp = hp
+            , score = 0, nextId = 100, spawnTimer = 999, spawnInterval = 999, seed = 1 }
 
 -- | A trivial projectile factory for tests (inert bullet).
 testBullet :: ProjectileType -> Vector2 -> Bullet
 testBullet pt origin = Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (pure ()))
 
+-- | An enemy factory for tests.
+testEnemy :: Vector2 -> Entity
+testEnemy pos = Entity { eid = EntityId 0, box = Box pos (Circle 12), speed = 80, script = enemyBehaviour }
+
 -- | A world with the given dt, aim, and tower; no visible enemies.
 testWorld :: Float -> Vector2 -> Vector2 -> World
 testWorld dt' aim towerP =
-  World { dt = dt', aimTarget = aim, towerPos = towerP, enemyList = [], mkProjectile = testBullet }
+  World { dt = dt', aimTarget = aim, towerPos = towerP, enemyList = []
+        , mkProjectile = testBullet, mkEnemy = testEnemy }
 
 main :: IO ()
 main = hspec $ do
@@ -176,3 +183,17 @@ main = hspec $ do
       let enemy = (mkEnemy (Vector2 900 900)) { eid = EntityId 1 }
           gs'   = step (worldWith [(EntityId 1, Vector2 900 900)]) (mkGs [enemy])
       length gs'.bullets `shouldBe` 0
+
+  describe "spawnTick (periodic enemy spawning)" $ do
+    let world = testWorld 0.1 (Vector2 0 0) (Vector2 0 0)
+    it "counts the timer down when a spawn is not yet due" $ do
+      let gs  = (mkGameState [] (Vector2 0 0) 10) { spawnTimer = 2, spawnInterval = 3 }
+          gs' = spawnTick world gs
+      length gs'.enemies `shouldBe` 0
+      gs'.spawnTimer `shouldSatisfy` (\t -> t > 1.89 && t < 1.91)
+    it "spawns an enemy at the top and resets the timer when due" $ do
+      let gs  = (mkGameState [] (Vector2 0 0) 10) { spawnTimer = 0.05, spawnInterval = 3 }
+          gs' = spawnTick world gs
+      length gs'.enemies `shouldBe` 1
+      gs'.spawnTimer `shouldBe` 3
+      map (\e -> let Vector2 _ y = e.box.center in y) gs'.enemies `shouldBe` [0]

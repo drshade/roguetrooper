@@ -58,11 +58,14 @@ data Effect
 -- state is neither comparable nor showable as data. Tests assert on individual
 -- fields instead.
 data GameState = GameState
-  { turret  :: Entity    -- ^ the player's turret
-  , enemies :: [Entity]  -- ^ active enemies
-  , bullets :: [Bullet]  -- ^ projectiles in flight
-  , tower   :: Vector2   -- ^ the defended position
-  , towerHp :: Int
-  , score   :: Int       -- ^ enemy kill count
-  , nextId  :: Int       -- ^ counter for assigning fresh 'EntityId's
+  { turret        :: Entity    -- ^ the player's turret
+  , enemies       :: [Entity]  -- ^ active enemies
+  , bullets       :: [Bullet]  -- ^ projectiles in flight
+  , tower         :: Vector2   -- ^ the defended position
+  , towerHp       :: Int
+  , score         :: Int       -- ^ enemy kill count
+  , nextId        :: Int       -- ^ counter for assigning fresh 'EntityId's
+  , spawnTimer    :: Float     -- ^ seconds until the next enemy spawn
+  , spawnInterval :: Float     -- ^ seconds between enemy spawns
+  , seed          :: Int       -- ^ RNG state for deterministic spawn positions
   }

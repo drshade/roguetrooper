@@ -10,11 +10,12 @@ module RogueTrooper.Engine
   , runEntityFrame
   , applyEffects
   , resolveTowerHits
+  , spawnTick
   , step
   ) where
 
 import Control.Monad.Free (Free (..))
-import Raylib.Types        (Vector2)
+import Raylib.Types        (Vector2, pattern Vector2)
 import Raylib.Util.Math    (vectorDistance)
 import RogueTrooper.Aim    (nearestInBox, seekToward)
 import RogueTrooper.Script (ScriptF (..))
@@ -32,6 +33,7 @@ data World = World
   , towerPos     :: Vector2                            -- ^ the defended tower's position
   , enemyList    :: [(EntityId, Vector2)]              -- ^ enemies visible to scripts
   , mkProjectile :: ProjectileType -> Vector2 -> Bullet -- ^ content factory: type + origin -> bullet
+  , mkEnemy      :: Vector2 -> Entity                  -- ^ content factory: position -> enemy
   }
 
 -- | Carry out a movement: move the entity's box toward @target@ by
@@ -85,6 +87,25 @@ applyEffects mk effs gs0 = foldl' apply gs0 effs
           b    = b0 { entity = ent0 { eid = EntityId gs.nextId } }
        in gs { bullets = gs.bullets <> [b], nextId = gs.nextId + 1 }
 
+-- | A simple deterministic LCG step (glibc constants).
+nextSeed :: Int -> Int
+nextSeed s = (1103515245 * s + 12345) `mod` 2147483648
+
+-- | Spawn a new enemy at a random top-of-screen position when the spawn timer
+-- elapses; otherwise count the timer down. Deterministic given the seed.
+spawnTick :: World -> GameState -> GameState
+spawnTick world gs
+  | gs.spawnTimer - world.dt > 0 = gs { spawnTimer = gs.spawnTimer - world.dt }
+  | otherwise =
+      let s'    = nextSeed gs.seed
+          x     = 50 + fromIntegral (s' `mod` 1180)   -- x in [50, 1230)
+          enemy = (world.mkEnemy (Vector2 x 0)) { eid = EntityId gs.nextId }
+       in gs { enemies    = enemy : gs.enemies
+             , nextId     = gs.nextId + 1
+             , seed       = s'
+             , spawnTimer = gs.spawnInterval
+             }
+
 -- | Remove enemies that have reached the tower, dealing 1 HP of tower damage
 -- per reaching enemy.
 resolveTowerHits :: GameState -> GameState
@@ -106,4 +127,4 @@ step world gs =
                            , enemies = map fst enemyR
                            , bullets = map fst bulletR
                            }
-   in resolveTowerHits (applyEffects world.mkProjectile effs gs1)
+   in spawnTick world (resolveTowerHits (applyEffects world.mkProjectile effs gs1))
