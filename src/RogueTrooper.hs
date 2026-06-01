@@ -51,7 +51,7 @@ initialState =
 -- real id. This is the single registry of projectile types.
 mkBullet :: ProjectileType -> Vector2 -> Bullet
 mkBullet pt@(StraightBullet target) origin =
-  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (straightBullet target))
+  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 2000 (straightBullet target))
 
 -- | Content-side enemy factory handed to the engine's spawner.
 spawnEnemy :: Vector2 -> Entity
@@ -72,7 +72,7 @@ frame gs = do
       gs'       = step world gs
   drawing $ do
     clearBackground Colors.black
-    renderBarrel gs'.tower mouse
+    renderBarrel gs'.tower gs'.turret.box.center
     renderTower gs'
     mapM_ (renderBox Colors.red . (.box)) gs'.enemies
     mapM_ (renderBox Colors.gold . (.box) . (.entity)) gs'.bullets

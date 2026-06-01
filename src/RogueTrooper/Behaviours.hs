@@ -45,9 +45,10 @@ farPoint from to
   | vectorDistance from to < 1 = from |+| Vector2 0 (-5000)   -- degenerate: aim up
   | otherwise                  = from |+| (vectorNormalize (to |-| from) |* 5000)
 
--- | Radius within which a straight bullet counts as hitting an enemy.
+-- | Radius within which a straight bullet counts as hitting an enemy. Generous
+-- enough that fast bullets don't tunnel past a target between frames.
 bulletHitRadius :: Float
-bulletHitRadius = 16
+bulletHitRadius = 22
 
 -- | Is a position outside the (margin-padded) screen?
 offScreen :: Vector2 -> Bool
