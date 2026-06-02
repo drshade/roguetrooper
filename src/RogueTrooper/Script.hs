@@ -18,6 +18,7 @@ module RogueTrooper.Script
   , getMyVel
   , getMyId
   , getTowerPos
+  , getGravity
   , getEnemies
   , getTargetInBox
   , steer
@@ -51,6 +52,7 @@ data ScriptF next
   | GetMyVel (Vector2 -> next)                -- ^ query: this entity's velocity
   | GetMyId (EntityId -> next)                -- ^ query: this entity's id
   | GetTowerPos (Vector2 -> next)             -- ^ query: the tower's position
+  | GetGravity (Vector2 -> next)              -- ^ query: the world gravity vector
   | GetEnemies ([(EntityId, Vector2)] -> next) -- ^ query: all enemies (id + position)
   | GetTargetInBox (Maybe (Vector2, Vector2) -> next) -- ^ query: nearest enemy in MY box (pos, velocity)
   | DoSteer Float Vector2 next                -- ^ command: ease my velocity toward a target (responsiveness, target velocity)
@@ -88,6 +90,10 @@ getMyId = liftF (GetMyId id)
 -- | Query the defended tower's position.
 getTowerPos :: Script Vector2
 getTowerPos = liftF (GetTowerPos id)
+
+-- | Query the world gravity vector (so scripts can correct for it, e.g. ballistic aiming).
+getGravity :: Script Vector2
+getGravity = liftF (GetGravity id)
 
 -- | Query all enemies (id + position) currently in the world.
 getEnemies :: Script [(EntityId, Vector2)]

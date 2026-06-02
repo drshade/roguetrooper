@@ -2,8 +2,8 @@ module Main where
 
 import qualified Data.Map.Strict     as Map
 import           RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, predictLead,
-                                          straightBullet, turretBehaviour)
+import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, launchToHit,
+                                          predictLead, straightBullet, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), applyEvents, integrate,
                                           resolveTowerHits, spawnTick, step)
 import           RogueTrooper.Types       (Box (..), BoxShape (..), Entity (..),
@@ -108,6 +108,17 @@ main = hspec $ do
     it "leads along the target's velocity by the bullet travel time" $
       predictLead (Vector2 0 0) (Vector2 100 0) (Vector2 0 50) 100
         `shouldSatisfy` (\(Vector2 x y) -> x == 100 && y > 45 && y < 65)
+
+  describe "launchToHit (ballistic firing solution)" $ do
+    it "produces a launch that lands exactly on the target under gravity" $
+      case launchToHit 40 10 (Vector2 0 0) (Vector2 100 50) of
+        Just (Vector2 vx vy) ->
+          let t = 100 / vx                       -- time to reach the target's x
+              y = vy * t + 0.5 * 10 * t * t       -- ballistic y at that time
+           in abs (y - 50) `shouldSatisfy` (< 0.01)
+        Nothing -> expectationFailure "expected a firing solution"
+    it "returns Nothing when the target is out of range" $
+      launchToHit 5 10 (Vector2 0 0) (Vector2 100000 0) `shouldBe` Nothing
 
   describe "integrate" $ do
     let g = Vector2 0 1000 :: Vector2

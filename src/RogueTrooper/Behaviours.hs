@@ -7,6 +7,7 @@ module RogueTrooper.Behaviours
   ( turretBehaviour
   , enemyBehaviour
   , straightBullet
+  , launchToHit
   , predictLead
   , bulletSpeed
   , groundLevel
@@ -17,8 +18,8 @@ import           Raylib.Util.Math    (magnitude, vectorDistance, vectorNormalize
                                       (|*), (|+|), (|-|))
 import           RogueTrooper.Script (ProjectileType (..), Script, damage,
                                       despawnSelf, fire, getAimPos, getDt,
-                                      getEnemies, getMyPos, getMyVel, getTowerPos,
-                                      push, setVel, steer, yield)
+                                      getEnemies, getGravity, getMyPos, getMyVel,
+                                      getTowerPos, push, setVel, steer, yield)
 
 -- Constants ------------------------------------------------------------------
 
@@ -112,18 +113,48 @@ turretBehaviour = turret 0
           then do
             tower <- getTowerPos
             scan  <- getMyPos                                -- scanbox centre = where we point
-            fire tower (StraightBullet (launchVel tower scan))
+            g     <- getGravity
+            let Vector2 _ gy = g
+                -- ballistic solution that lands on the scanbox; straight shot if out of range
+                v = maybe (launchVel tower scan) id (launchToHit bulletSpeed gy tower scan)
+            fire tower (StraightBullet v)
             pure fireInterval
           else pure cooldown
       dt <- getDt
       yield
       turret (cooldown' - dt)
 
--- | Initial bullet velocity: from the tower toward the scanbox, at bulletSpeed.
+-- | Straight-line launch velocity from the tower toward the scanbox (fallback
+-- when no ballistic solution exists).
 launchVel :: Vector2 -> Vector2 -> Vector2
 launchVel tower scan
   | vectorDistance tower scan < 1 = Vector2 0 (-bulletSpeed)   -- degenerate: straight up
   | otherwise                     = vectorNormalize (scan |-| tower) |* bulletSpeed
+
+-- | Ballistic firing solution: the launch velocity (of magnitude @speed@) that,
+-- under downward gravity @g@, lands a projectile fired from @origin@ exactly on
+-- @target@. Returns the flatter (lower-arc) of the two solutions, or Nothing if
+-- the target is out of range.
+launchToHit :: Float -> Float -> Vector2 -> Vector2 -> Maybe Vector2
+launchToHit speed g (Vector2 ox oy) (Vector2 tx ty)
+  | g <= 0    = Nothing
+  | otherwise =
+      -- Solve 0.25 g² u² - (g·dy + v²) u + (dx²+dy²) = 0 for u = T² (flight time²).
+      let dx   = tx - ox
+          dy   = ty - oy
+          v2   = speed * speed
+          a    = 0.25 * g * g
+          b    = negate (g * dy + v2)
+          c    = dx * dx + dy * dy
+          disc = b * b - 4 * a * c
+       in if disc < 0
+            then Nothing
+            else case filter (> 0) [(-b - sqrt disc) / (2 * a), (-b + sqrt disc) / (2 * a)] of
+                   [] -> Nothing
+                   us -> let t  = sqrt (minimum us)          -- smallest T → flattest, fastest arc
+                             vx = dx / t
+                             vy = (dy - 0.5 * g * t * t) / t
+                          in Just (Vector2 vx vy)
 
 -- | A paratrooper: while airborne the parachute steers it toward a capped
 -- descent velocity (gravity pulls, the chute limits the fall); once landed it

@@ -57,6 +57,7 @@ runEntityFrame world ent = go [] ent.script
       Free (GetMyVel k)             -> go evs (k ent.vel)
       Free (GetMyId k)              -> go evs (k ent.eid)
       Free (GetTowerPos k)          -> go evs (k world.towerPos)
+      Free (GetGravity k)           -> go evs (k world.gravity)
       Free (GetEnemies k)           -> go evs (k [(i, p) | (i, p, _) <- world.enemyList])
       Free (GetTargetInBox k)       -> go evs (k (targetInBox ent.box world.enemyList))
       Free (DoSteer resp tgt next)  -> go (Steer ent.eid resp tgt : evs) next
