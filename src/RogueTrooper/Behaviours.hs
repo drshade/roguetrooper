@@ -42,10 +42,11 @@ enemySpeed = 80
 enemyResponsiveness = 6
 
 -- | Parachute: the descent velocity an airborne enemy steers toward, and how
--- strongly. Terminal fall speed ≈ parachuteSpeed + gravity / parachuteResponsiveness.
+-- strongly. Terminal fall speed ≈ parachuteSpeed + gravity / parachuteResponsiveness
+-- (≈ 70 + 900/40 ≈ 92 px/s). Higher responsiveness ⇒ terminal closer to parachuteSpeed.
 parachuteSpeed, parachuteResponsiveness :: Float
-parachuteSpeed = 100
-parachuteResponsiveness = 12
+parachuteSpeed = 70
+parachuteResponsiveness = 40
 
 -- | Launch speed of fired bullets.
 bulletSpeed :: Float

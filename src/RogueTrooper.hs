@@ -21,7 +21,7 @@ import           Raylib.Util.Math        (vectorNormalize, (|*), (|+|), (|-|))
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel,
                                           straightBullet, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
-import           RogueTrooper.Types       (Box (..), BoxShape (..), Entity (..),
+import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..),
                                           EntityId (..), EntityKind (..),
                                           GameState (..), ProjectileType (..))
 
@@ -43,7 +43,7 @@ initialState =
     , score         = 0
     , nextId        = 1
     , spawnTimer    = 0.5
-    , spawnInterval = 0.1
+    , spawnInterval = 0.5
     , seed          = 12345
     }
   where
