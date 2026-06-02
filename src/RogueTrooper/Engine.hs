@@ -11,7 +11,6 @@ module RogueTrooper.Engine
   , applyEvents
   , integrate
   , resolveTowerHits
-  , spawnTick
   , step
   ) where
 
@@ -64,17 +63,19 @@ runEntityFrame world ent = go [] ent.script
       Free (DoSetVel v next)        -> go (SetVel ent.eid v : evs) next
       Free (DoPush tid dv next)     -> go (Impulse tid dv : evs) next
       Free (Fire origin pt next)    -> go (Spawn pt origin : evs) next
+      Free (SpawnEnemyAt pos next)  -> go (SpawnEnemy pos : evs) next
       Free (Hit tid amt next)       -> go (Damage tid amt : evs) next
       Free (Expire tid next)        -> go (Despawn tid : evs) next
 
     targetInBox b enemies = nearestInBox b [((p, v), p) | (_, p, v) <- enemies]
 
--- | Fold a frame's events into the world: ease/impulse velocities, store
--- continuations, spawn projectiles (fresh ids), damage (kill + score enemies at
--- 0 HP), and despawn entities.
-applyEvents :: Float -> (ProjectileType -> Vector2 -> Entity) -> [Event] -> GameState -> GameState
-applyEvents dt' mk evs gs0 = foldl' apply gs0 evs
+-- | Fold a frame's events into the world: ease/set/impulse velocities, store
+-- continuations, spawn projectiles and enemies (fresh ids), damage (kill + score
+-- enemies at 0 HP), and despawn entities.
+applyEvents :: World -> [Event] -> GameState -> GameState
+applyEvents world evs gs0 = foldl' apply gs0 evs
   where
+    dt' = world.dt
     apply gs (Steer i resp tgt) =
       gs { entities = Map.adjust (\e -> e { vel = e.vel |+| ((tgt |-| e.vel) |* min 1 (resp * dt')) }) i gs.entities }
     apply gs (SetVel i v) =
@@ -83,10 +84,8 @@ applyEvents dt' mk evs gs0 = foldl' apply gs0 evs
       gs { entities = Map.adjust (\e -> e { vel = e.vel |+| dv }) i gs.entities }
     apply gs (SetScript i k) = gs { entities = Map.adjust (\e -> e { script = k }) i gs.entities }
     apply gs (Despawn i)     = gs { entities = Map.delete i gs.entities }
-    apply gs (Spawn pt origin) =
-      let i = EntityId gs.nextId
-          e = (mk pt origin) { eid = i }
-       in gs { entities = Map.insert i e gs.entities, nextId = gs.nextId + 1 }
+    apply gs (Spawn pt origin) = addEntity (world.mkProjectile pt origin) gs
+    apply gs (SpawnEnemy pos)  = addEntity (world.mkEnemy pos) gs
     apply gs (Damage i amt) =
       case Map.lookup i gs.entities of
         Nothing -> gs
@@ -98,6 +97,11 @@ applyEvents dt' mk evs gs0 = foldl' apply gs0 evs
                         }
                 else gs { entities = Map.insert i e' gs.entities }
 
+    -- add a freshly-assembled entity, assigning it the next id
+    addEntity e gs = let i = EntityId gs.nextId
+                      in gs { entities = Map.insert i (e { eid = i }) gs.entities
+                            , nextId   = gs.nextId + 1 }
+
 -- | Physics integration: apply gravity to airborne physical entities, move
 -- everyone by velocity, and rest landed enemies on the ground (clamp + stop
 -- vertical motion). The turret/scanbox is a non-physical reticle — no gravity,
@@ -105,9 +109,13 @@ applyEvents dt' mk evs gs0 = foldl' apply gs0 evs
 integrate :: Vector2 -> Float -> Float -> GameState -> GameState
 integrate g ground dt' gs = gs { entities = Map.map move gs.entities }
   where
+    physical e = case e.kind of
+      Enemy        -> True
+      Projectile _ -> True
+      _            -> False                     -- Turret reticle / Director: no gravity
     move e =
       let Vector2 _ y       = e.box.center
-          airborne          = e.kind /= Turret && y < ground
+          airborne          = physical e && y < ground
           v1                = if airborne then e.vel |+| (g |* dt') else e.vel
           Vector2 cx cy     = e.box.center |+| (v1 |* dt')
           (center', vel')
@@ -126,31 +134,11 @@ resolveTowerHits gs =
     hits      = Map.filter reached gs.entities
     reached e = e.kind == Enemy && vectorDistance e.box.center gs.tower <= towerHitRadius
 
--- | A simple deterministic LCG step (glibc constants).
-nextSeed :: Int -> Int
-nextSeed s = (1103515245 * s + 12345) `mod` 2147483648
-
--- | Spawn a new enemy at a random top-of-screen position when the spawn timer
--- elapses; otherwise count it down. Deterministic given the seed.
-spawnTick :: World -> GameState -> GameState
-spawnTick world gs
-  | gs.spawnTimer - world.dt > 0 = gs { spawnTimer = gs.spawnTimer - world.dt }
-  | otherwise =
-      let s'    = nextSeed gs.seed
-          x     = 50 + fromIntegral (s' `mod` 1180)   -- x in [50, 1230)
-          i     = EntityId gs.nextId
-          enemy = (world.mkEnemy (Vector2 x 0)) { eid = i }
-       in gs { entities   = Map.insert i enemy gs.entities
-             , nextId     = gs.nextId + 1
-             , seed       = s'
-             , spawnTimer = gs.spawnInterval
-             }
-
 -- | Advance the whole simulation one frame: collect every entity's events, fold
 -- them into the world (velocity persists between frames), integrate physics,
--- then resolve tower hits and spawning.
+-- then resolve tower hits. (Enemy spawning is driven by the mission director.)
 step :: World -> GameState -> GameState
 step world gs =
   let events = concatMap (runEntityFrame world) (Map.elems gs.entities)
-      folded = applyEvents world.dt world.mkProjectile events gs
-   in spawnTick world (resolveTowerHits (integrate world.gravity world.groundLevel world.dt folded))
+      folded = applyEvents world events gs
+   in resolveTowerHits (integrate world.gravity world.groundLevel world.dt folded)

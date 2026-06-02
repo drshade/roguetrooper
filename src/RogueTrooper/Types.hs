@@ -35,6 +35,7 @@ data EntityKind
   = Turret
   | Enemy
   | Projectile ProjectileType
+  | Director              -- ^ an invisible, non-physical script carrier (the mission)
   deriving (Eq, Show)
 
 -- | A scripted actor in the world. Every entity — the turret, enemies, and
@@ -62,6 +63,7 @@ data Event
   | Impulse EntityId Vector2      -- ^ add a Δv to this entity's velocity (knockback)
   | SetScript EntityId (Script ()) -- ^ store this entity's resumed continuation
   | Spawn ProjectileType Vector2  -- ^ spawn a projectile (engine assembles + assigns id)
+  | SpawnEnemy Vector2            -- ^ spawn an enemy at a position (via the enemy factory)
   | Damage EntityId Int           -- ^ deal N damage to the identified entity
   | Despawn EntityId              -- ^ remove the identified entity
 
@@ -70,12 +72,9 @@ data Event
 --
 -- No 'Eq'/'Show': entities hold resumable continuations (functions).
 data GameState = GameState
-  { entities      :: Map.Map EntityId Entity  -- ^ all actors, keyed by id
-  , tower         :: Vector2                  -- ^ the defended position
-  , towerHp       :: Int
-  , score         :: Int                      -- ^ enemy kill count
-  , nextId        :: Int                      -- ^ counter for assigning fresh ids
-  , spawnTimer    :: Float                    -- ^ seconds until the next enemy spawn
-  , spawnInterval :: Float                    -- ^ seconds between enemy spawns
-  , seed          :: Int                      -- ^ RNG state for deterministic spawns
+  { entities :: Map.Map EntityId Entity  -- ^ all actors, keyed by id
+  , tower    :: Vector2                  -- ^ the defended position
+  , towerHp  :: Int
+  , score    :: Int                      -- ^ enemy kill count
+  , nextId   :: Int                      -- ^ counter for assigning fresh ids
   }

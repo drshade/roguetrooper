@@ -25,6 +25,7 @@ module RogueTrooper.Script
   , setVel
   , push
   , fire
+  , spawnEnemyAt
   , damage
   , despawn
   , despawnSelf
@@ -59,6 +60,7 @@ data ScriptF next
   | DoSetVel Vector2 next                     -- ^ command: hard-set my velocity (kinematic — no forces/easing)
   | DoPush EntityId Vector2 next              -- ^ effect: apply an impulse (Δv) to an entity
   | Fire Vector2 ProjectileType next          -- ^ effect: spawn a projectile from a given origin
+  | SpawnEnemyAt Vector2 next                 -- ^ effect: spawn an enemy at a position
   | Hit EntityId Int next                      -- ^ effect: deal N damage to the named enemy
   | Expire EntityId next                      -- ^ effect: remove the named entity
   | Yield next                                -- ^ suspend until the next frame
@@ -121,6 +123,10 @@ push tid dv = liftF (DoPush tid dv ())
 -- | Spawn a projectile of the given type from the given origin.
 fire :: Vector2 -> ProjectileType -> Script ()
 fire origin pt = liftF (Fire origin pt ())
+
+-- | Spawn an enemy at the given position (assembled by the world's enemy factory).
+spawnEnemyAt :: Vector2 -> Script ()
+spawnEnemyAt pos = liftF (SpawnEnemyAt pos ())
 
 -- | Deal @amount@ damage to the named enemy.
 damage :: EntityId -> Int -> Script ()

@@ -19,7 +19,8 @@ import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
 import           Raylib.Util.Math        (vectorNormalize, (|*), (|+|), (|-|))
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel,
-                                          straightBullet, turretBehaviour)
+                                          missionDirector, straightBullet,
+                                          turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..),
                                           EntityId (..), EntityKind (..),
@@ -37,17 +38,15 @@ worldGravity = Vector2 0 900
 initialState :: GameState
 initialState =
   GameState
-    { entities      = Map.fromList [(EntityId 0, turret)]
-    , tower         = Vector2 640 620   -- just above the ground line
-    , towerHp       = 10
-    , score         = 0
-    , nextId        = 1
-    , spawnTimer    = 0.5
-    , spawnInterval = 0.5
-    , seed          = 12345
+    { entities = Map.fromList [(EntityId 0, turret), (EntityId 1, director)]
+    , tower    = Vector2 640 620   -- just above the ground line
+    , towerHp  = 10
+    , score    = 0
+    , nextId   = 2
     }
   where
-    turret = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
+    turret   = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
+    director = Entity (EntityId 1) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 missionDirector
 
 -- | Content-side projectile factory handed to the engine: map a 'ProjectileType'
 -- to an assembled entity (its kind, behaviour script, shape). The engine assigns
@@ -100,6 +99,7 @@ renderEntity e = case e.kind of
   Turret       -> renderBox Colors.lime e.box
   Enemy        -> renderBox Colors.red e.box >> renderEnemyHp e
   Projectile _ -> renderBox Colors.gold e.box
+  Director     -> pure ()                       -- invisible mission script
 
 -- | Draw the targeting-region outline for a box, by shape.
 renderBox :: Color -> Box -> IO ()

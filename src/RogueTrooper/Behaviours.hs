@@ -7,6 +7,8 @@ module RogueTrooper.Behaviours
   ( turretBehaviour
   , enemyBehaviour
   , straightBullet
+  , missionDirector
+  , wait
   , launchToHit
   , predictLead
   , bulletSpeed
@@ -19,7 +21,8 @@ import           Raylib.Util.Math    (magnitude, vectorDistance, vectorNormalize
 import           RogueTrooper.Script (ProjectileType (..), Script, damage,
                                       despawnSelf, fire, getAimPos, getDt,
                                       getEnemies, getGravity, getMyPos, getMyVel,
-                                      getTowerPos, push, setVel, steer, yield)
+                                      getTowerPos, push, setVel, spawnEnemyAt,
+                                      steer, yield)
 
 -- Constants ------------------------------------------------------------------
 
@@ -194,6 +197,50 @@ knockback :: Vector2 -> Vector2
 knockback v
   | magnitude v < 1 = Vector2 0 0
   | otherwise       = vectorNormalize v |* knockbackStrength
+
+-- Mission director -----------------------------------------------------------
+
+-- | Seconds between trooper drops within a round, and between rounds.
+dropInterval, betweenRounds :: Float
+dropInterval = 0.6
+betweenRounds = 4
+
+-- | Suspend the script for a duration, yielding each frame (sequential wait —
+-- built from getDt + yield; the resumable continuation carries the countdown).
+wait :: Float -> Script ()
+wait remaining
+  | remaining <= 0 = pure ()
+  | otherwise      = do
+      dt <- getDt
+      yield
+      wait (remaining - dt)
+
+-- | The mission: three rounds dropping 10, 15 and 20 troopers, paced over time
+-- (a paused gap between rounds), then idle. Carries its own RNG seed for drop
+-- positions, so the mission is deterministic.
+missionDirector :: Script ()
+missionDirector = runRounds 12345 [10, 15, 20]
+  where
+    runRounds :: Int -> [Int] -> Script ()
+    runRounds _    []         = forever yield          -- mission complete
+    runRounds seed (n : rest) = do
+      seed' <- dropTroopers seed n
+      wait betweenRounds
+      runRounds seed' rest
+
+    dropTroopers :: Int -> Int -> Script Int
+    dropTroopers seed 0 = pure seed
+    dropTroopers seed k = do
+      let (x, seed') = randomTopX seed
+      spawnEnemyAt (Vector2 x 0)
+      wait dropInterval
+      dropTroopers seed' (k - 1)
+
+-- | Deterministic random x along the top of the screen, advancing the seed.
+randomTopX :: Int -> (Float, Int)
+randomTopX s =
+  let s' = (1103515245 * s + 12345) `mod` 2147483648
+   in (50 + fromIntegral (s' `mod` 1180), s')
 
 -- | Predict where to aim to hit a moving target: the intercept point given the
 -- bullet's travel time. Kept for the future auto-aimer. Two fixed-point
