@@ -196,17 +196,11 @@ main = hspec $ do
       Map.member (EntityId 2) gs'.entities `shouldBe` False
 
   describe "turret firing" $ do
-    let towerP       = Vector2 640 700
-        turretE      = turretAt (EntityId 0) (Vector2 100 100) 60
-        worldWith es = (testWorld 0.016 (Vector2 100 100) towerP) { enemyList = es }
-    it "spawns a projectile when an enemy is inside the turret box" $ do
-      let gs' = step (worldWith [(EntityId 1, Vector2 110 110, Vector2 0 0)])
-                     (mkGameState [turretE, mkEnemyAt (EntityId 1) (Vector2 110 110)] towerP 10)
+    let towerP  = Vector2 640 700
+        turretE = turretAt (EntityId 0) (Vector2 100 100) 60
+    it "fires a projectile toward the scanbox each shot (no target needed)" $ do
+      let gs' = step (testWorld 0.016 (Vector2 100 100) towerP) (mkGameState [turretE] towerP 10)
       length (projectilesOf gs') `shouldBe` 1
-    it "holds fire when no enemy is in the box" $ do
-      let gs' = step (worldWith [(EntityId 1, Vector2 900 900, Vector2 0 0)])
-                     (mkGameState [turretE, mkEnemyAt (EntityId 1) (Vector2 900 900)] towerP 10)
-      length (projectilesOf gs') `shouldBe` 0
 
   describe "spawnTick (periodic enemy spawning)" $ do
     let world = testWorld 0.1 (Vector2 0 0) (Vector2 0 0)

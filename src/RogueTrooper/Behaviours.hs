@@ -17,7 +17,7 @@ import           Raylib.Util.Math    (vectorDistance, vectorNormalize, (|*),
                                       (|+|), (|-|))
 import           RogueTrooper.Script (ProjectileType (..), Script, damage,
                                       despawnSelf, fire, getAimPos, getDt,
-                                      getEnemies, getMyPos, getTargetInBox,
+                                      getEnemies, getMyPos,
                                       getTowerPos, moveToward, yield)
 
 -- | The y coordinate at which descending enemies are considered landed.
@@ -41,25 +41,27 @@ turretSeekSpeed = 320
 enemySpeed :: Float
 enemySpeed = 80
 
--- | The turret: seek toward the aim position and fire at locked targets on a
--- cooldown carried in its own continuation.
+-- | The turret: the scanbox (its box) seeks toward the crosshair, and every
+-- cooldown it fires from the tower toward the scanbox centre — i.e. wherever it
+-- is currently pointing. No target lock yet (a future auto-aimer will pick a
+-- target within the scanbox). Cooldown carried in its own continuation.
 turretBehaviour :: Script ()
 turretBehaviour = turret 0   -- cooldown carried in the continuation, starts ready
   where
     turret cooldown = do
       aim <- getAimPos
-      moveToward turretSeekSpeed aim
-      target <- getTargetInBox
-      cooldown' <- case target of
-        Just (tp, tv) | cooldown <= 0 -> do
-          tower <- getTowerPos
-          let lead = predictLead tower tp tv bulletSpeed  -- aim where the target will be
-          fire tower (StraightBullet (farPoint tower lead))
-          pure fireInterval                               -- reset cooldown after firing
-        _ -> pure cooldown                                -- no target or still cooling down
+      moveToward turretSeekSpeed aim                       -- scanbox seeks the crosshair
+      cooldown' <-
+        if cooldown <= 0
+          then do
+            tower <- getTowerPos
+            scan  <- getMyPos                               -- scanbox centre = where we point
+            fire tower (StraightBullet (farPoint tower scan))
+            pure fireInterval
+          else pure cooldown
       dt <- getDt
       yield
-      turret (cooldown' - dt)                             -- tick the cooldown down
+      turret (cooldown' - dt)                              -- tick the cooldown down
 
 -- | A point far along the ray from @from@ through @to@, so a straight bullet
 -- flies through its target rather than stopping on it.

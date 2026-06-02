@@ -18,7 +18,6 @@ import           Raylib.Types            (Color, Vector2, pattern Rectangle,
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
 import           Raylib.Util.Math        (vectorNormalize, (|*), (|+|), (|-|))
-import           RogueTrooper.Aim        (nearestInBox)
 import           RogueTrooper.Behaviours (enemyBehaviour, straightBullet,
                                           turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
@@ -72,14 +71,12 @@ frame gs = do
       world     = World dt mouse gs.tower enemyList mkProjectile spawnEnemy
       gs'       = step world gs
       ents      = Map.elems gs'.entities
-      enemies   = [e | e <- ents, e.kind == Enemy]
       mTurret   = find (\e -> e.kind == Turret) ents
   drawing $ do
     clearBackground Colors.black
     maybe (pure ()) (\t -> renderBarrel gs'.tower t.box.center) mTurret
     renderTower gs'
     mapM_ renderEntity ents
-    maybe (pure ()) (\t -> renderLockOn t.box enemies) mTurret
     renderAimBox mouse
     drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
     fps <- getFPS
@@ -120,14 +117,7 @@ renderAimBox m = do
   drawLineV (Vector2 (mx - k) my) (Vector2 (mx + k) my) Colors.rayWhite
   drawLineV (Vector2 mx (my - k)) (Vector2 mx (my + k)) Colors.rayWhite
 
--- | Draw a lock-on marker on the enemy the turret is currently targeting.
-renderLockOn :: Box -> [Entity] -> IO ()
-renderLockOn turretBox enemies =
-  case nearestInBox turretBox [(e.box.center, e.box.center) | e <- enemies] of
-    Just p  -> drawCircleLinesV p 20 Colors.yellow
-    Nothing -> pure ()
-
--- | Draw the turret barrel: a thick stub from the tower pointing at the turret box.
+-- | Draw the turret barrel: a thick stub from the tower pointing at the scanbox.
 renderBarrel :: Vector2 -> Vector2 -> IO ()
 renderBarrel tower aim =
   let end = tower |+| (vectorNormalize (aim |-| tower) |* 48)
