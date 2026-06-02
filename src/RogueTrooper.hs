@@ -10,14 +10,14 @@ import qualified Data.Map.Strict         as Map
 import           Raylib.Core             (clearBackground, getFPS, getFrameTime,
                                           getMousePosition)
 import           Raylib.Core.Shapes      (drawCircleLinesV, drawEllipseLines,
-                                          drawLineEx, drawLineV,
-                                          drawRectangleLinesEx, drawRectangleV)
+                                          drawLineV, drawRectangleLinesEx,
+                                          drawRectanglePro, drawRectangleV)
 import           Raylib.Core.Text        (drawText)
 import           Raylib.Types            (Color, Vector2, pattern Rectangle,
                                           pattern Vector2)
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
-import           Raylib.Util.Math        (vectorNormalize, (|*), (|+|), (|-|))
+import           Raylib.Util.Math        ((|-|))
 import           RogueTrooper.Aim        (nearestInBox)
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
                                           missionDirector, straightBullet,
@@ -81,11 +81,11 @@ frame gs = do
   drawing $ do
     clearBackground Colors.black
     renderGround
-    maybe (pure ()) (\t -> renderBarrel gs'.tower t.box.center) mTurret
-    renderTower gs'
+    maybe (pure ()) (\t -> renderTurret gs'.tower t.box.center) mTurret
     mapM_ renderEntity ents
     maybe (pure ()) (\t -> renderLockOn t.box enemies) mTurret
     renderAimBox mouse
+    drawText ("Tower HP: " <> show gs'.towerHp) 20 20 20 Colors.rayWhite
     drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
     fps <- getFPS
     drawText ("FPS: " <> show fps) 20 76 20 Colors.lime
@@ -138,15 +138,51 @@ renderLockOn scanbox enemies =
     Just p  -> drawCircleLinesV p 20 Colors.yellow
     Nothing -> pure ()
 
--- | Draw the turret barrel: a thick stub from the tower pointing at the scanbox.
-renderBarrel :: Vector2 -> Vector2 -> IO ()
-renderBarrel tower aim =
-  let end = tower |+| (vectorNormalize (aim |-| tower) |* 48)
-   in drawLineEx tower end 8 Colors.darkGray
+-- 8-bit turret sprite ---------------------------------------------------------
 
--- | Draw the tower and its HP readout.
-renderTower :: GameState -> IO ()
-renderTower gs = do
-  let Vector2 tx ty = gs.tower
-  drawRectangleV (Vector2 (tx - 20) (ty - 20)) (Vector2 40 40) Colors.gray
-  drawText ("Tower HP: " <> show gs.towerHp) 20 20 20 Colors.rayWhite
+-- | Screen size of one art pixel.
+artPx :: Float
+artPx = 4
+
+-- | Draw a pixel sprite (rows of chars; ' ' = transparent) centred on a point,
+-- each non-space char looked up in the palette and drawn as one art pixel.
+drawSprite :: Vector2 -> [(Char, Color)] -> [String] -> IO ()
+drawSprite (Vector2 cx cy) palette rows =
+  sequence_
+    [ drawRectangleV (Vector2 (x0 + fromIntegral col * artPx) (y0 + fromIntegral row * artPx))
+                     (Vector2 artPx artPx) c
+    | (row, line) <- zip [0 :: Int ..] rows
+    , (col, ch)   <- zip [0 :: Int ..] line
+    , c           <- maybe [] pure (lookup ch palette)
+    ]
+  where
+    h  = length rows
+    w  = maximum (map length rows)
+    x0 = cx - fromIntegral w * artPx / 2
+    y0 = cy - fromIntegral h * artPx / 2
+
+turretPalette :: [(Char, Color)]
+turretPalette = [('d', Colors.darkGray), ('G', Colors.gray), ('L', Colors.lightGray)]
+
+turretRows :: [String]
+turretRows =
+  [ "  dGGd  "
+  , " dGLLGd "
+  , "dGLLLLGd"
+  , "dGGGGGGd"
+  , "dGGGGGGd"
+  , "ddGGGGdd"
+  ]
+
+-- | The 8-bit turret: a base/dome at the tower with a barrel that swivels to
+-- point at the scanbox.
+renderTurret :: Vector2 -> Vector2 -> IO ()
+renderTurret tower scan = do
+  let Vector2 dx dy = scan |-| tower
+      angle = atan2 dy dx * 180 / pi
+      Vector2 ptx pty = tower
+      -- a barrel segment rotating about the tower (pivot at its inner edge)
+      bar len th col = drawRectanglePro (Rectangle ptx pty len th) (Vector2 0 (th / 2)) angle col
+  bar 34 12 Colors.darkGray    -- barrel body (its dark end reads as a muzzle)
+  bar 28 5  Colors.lightGray   -- highlight stripe, shorter so a muzzle shows
+  drawSprite tower turretPalette turretRows
