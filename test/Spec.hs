@@ -17,11 +17,11 @@ shouldBeCloseTo (Vector2 ax ay) (Vector2 bx by) =
 
 -- | A turret that does nothing (so step leaves it untouched in enemy tests).
 noopTurret :: Entity
-noopTurret = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 1), speed = 0, vel = Vector2 0 0, script = pure () }
+noopTurret = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 1), vel = Vector2 0 0, script = pure () }
 
 -- | An enemy at a position, running the real enemy behaviour.
 mkEnemy :: Vector2 -> Entity
-mkEnemy p = Entity { eid = EntityId 9, box = Box p (Circle 12), speed = 100, vel = Vector2 0 0, script = enemyBehaviour }
+mkEnemy p = Entity { eid = EntityId 9, box = Box p (Circle 12), vel = Vector2 0 0, script = enemyBehaviour }
 
 -- | A minimal game state with the given enemies, tower position, and HP.
 -- Spawn timer is parked high so steps don't spawn unless a test lowers it.
@@ -32,11 +32,11 @@ mkGameState es towerP hp =
 
 -- | A trivial projectile factory for tests (inert bullet).
 testBullet :: ProjectileType -> Vector2 -> Bullet
-testBullet pt origin = Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) 600 (Vector2 0 0) (pure ()))
+testBullet pt origin = Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) (Vector2 0 0) (pure ()))
 
 -- | An enemy factory for tests.
 testEnemy :: Vector2 -> Entity
-testEnemy pos = Entity { eid = EntityId 0, box = Box pos (Circle 12), speed = 80, vel = Vector2 0 0, script = enemyBehaviour }
+testEnemy pos = Entity { eid = EntityId 0, box = Box pos (Circle 12), vel = Vector2 0 0, script = enemyBehaviour }
 
 -- | A world with the given dt, aim, and tower; no visible enemies.
 testWorld :: Float -> Vector2 -> Vector2 -> World
@@ -88,18 +88,20 @@ main = hspec $ do
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
 
   describe "turret script (resumable, entity interpreter)" $ do
-    let turretE = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 10), speed = 100, vel = Vector2 0 0, script = turretBehaviour }
+    let turretE = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 10), vel = Vector2 0 0, script = turretBehaviour }
         gs0     = (mkGameState [] (Vector2 0 0) 10) { turret = turretE }
         world   = testWorld 0.1 (Vector2 100 0) (Vector2 0 0)
-    it "moves the turret box toward the aim position in one frame" $
-      (step world gs0).turret.box.center `shouldBeCloseTo` Vector2 10 0
-    it "resumes the continuation across frames, continuing to move" $
-      let g1 = step world gs0   -- (0,0)  -> (10,0)
-          g2 = step world g1    -- (10,0) -> (20,0)
-       in g2.turret.box.center `shouldBeCloseTo` Vector2 20 0
-    it "leaves speed, shape, tower and hp untouched" $ do
+    it "moves the turret box toward the aim position (without overshooting) in one frame" $
+      (step world gs0).turret.box.center
+        `shouldSatisfy` (\(Vector2 x y) -> x > 0 && x <= 100 && y == 0)
+    it "resumes the continuation across frames, moving further each frame" $
       let g1 = step world gs0
-      g1.turret.speed `shouldBe` 100
+          g2 = step world g1
+          Vector2 x1 _ = g1.turret.box.center
+          Vector2 x2 _ = g2.turret.box.center
+       in (x2 > x1) `shouldBe` True
+    it "leaves shape, tower and hp untouched" $ do
+      let g1 = step world gs0
       g1.turret.box.shape `shouldBe` Circle 10
       g1.towerHp `shouldBe` 10
 
@@ -156,7 +158,7 @@ main = hspec $ do
     let enemyP        = Vector2 500 500
         mkBulletAt p tgt =
           Bullet (StraightBullet tgt)
-            (Entity { eid = EntityId 2, box = Box p (Circle 4), speed = 600, vel = Vector2 0 0, script = straightBullet tgt })
+            (Entity { eid = EntityId 2, box = Box p (Circle 4), vel = Vector2 0 0, script = straightBullet tgt })
         worldWith es = (testWorld 0.016 (Vector2 0 0) (Vector2 0 0)) { enemyList = es }
     it "damages an enemy within range, scores, and despawns itself" $ do
       let enemy = (mkEnemy enemyP) { eid = EntityId 1 }
@@ -172,7 +174,7 @@ main = hspec $ do
 
   describe "turret firing" $ do
     let towerP   = Vector2 640 700
-        turretE  = Entity { eid = EntityId 0, box = Box (Vector2 100 100) (Circle 60), speed = 320, script = turretBehaviour }
+        turretE  = Entity { eid = EntityId 0, box = Box (Vector2 100 100) (Circle 60), vel = Vector2 0 0, script = turretBehaviour }
         mkGs es  = (mkGameState es towerP 10) { turret = turretE }
         worldWith es = (testWorld 0.016 (Vector2 100 100) towerP) { enemyList = es }
     it "fires a projectile from the tower when an enemy is inside the turret box" $ do

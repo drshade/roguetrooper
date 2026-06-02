@@ -37,12 +37,12 @@ data World = World
   }
 
 -- | Carry out a movement: move the entity's box toward @target@ by
--- @entity.speed * dt@.
-moveEntity :: Float -> Vector2 -> Entity -> Entity
-moveEntity dt' target ent = ent { box = b' { center = newCenter }, vel = v }
+-- @speed * dt@, recording the resulting velocity.
+moveEntity :: Float -> Float -> Vector2 -> Entity -> Entity
+moveEntity speed dt' target ent = ent { box = b' { center = newCenter }, vel = v }
   where
     b'        = ent.box
-    newCenter = seekToward ent.speed dt' b'.center target
+    newCenter = seekToward speed dt' b'.center target
     v         = if dt' <= 0 then Vector2 0 0 else (newCenter |-| b'.center) |* (1 / dt')
 
 -- | Run one entity's script for a single frame: execute queries and movement
@@ -62,7 +62,7 @@ runEntityFrame world ent0 = go ent0 [] ent0.script
       Free (GetTowerPos k)          -> go ent effs (k world.towerPos)
       Free (GetEnemies k)           -> go ent effs (k [(i, p) | (i, p, _) <- world.enemyList])
       Free (GetTargetInBox k)       -> go ent effs (k (targetInBox ent.box world.enemyList))
-      Free (MoveToward target next) -> go (moveEntity world.dt target ent) effs next
+      Free (MoveToward speed target next) -> go (moveEntity speed world.dt target ent) effs next
       Free (Fire origin pt next)    -> go ent (Spawn pt origin : effs) next
       Free (Hit tid next)           -> go ent (Damage tid : effs) next
       Free (Expire tid next)        -> go ent (Despawn tid : effs) next

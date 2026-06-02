@@ -6,19 +6,24 @@ module RogueTrooper
   ( runGame
   ) where
 
-import           Raylib.Core         (clearBackground, getFrameTime, getMousePosition)
-import           Raylib.Core.Shapes  (drawCircleLinesV, drawEllipseLines, drawLineEx, drawLineV,
-                                       drawRectangleLinesEx, drawRectangleV)
-import           Raylib.Core.Text    (drawText)
-import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern Vector2)
-import           Raylib.Util         (drawing, whileWindowOpen_, withWindow)
-import qualified Raylib.Util.Colors  as Colors
-import           Raylib.Util.Math    (vectorNormalize, (|*), (|+|), (|-|))
+import           Raylib.Core             (clearBackground, getFrameTime,
+                                          getMousePosition)
+import           Raylib.Core.Shapes      (drawCircleLinesV, drawEllipseLines,
+                                          drawLineEx, drawLineV,
+                                          drawRectangleLinesEx, drawRectangleV)
+import           Raylib.Core.Text        (drawText)
+import           Raylib.Types            (Color, Vector2, pattern Rectangle,
+                                          pattern Vector2)
+import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
+import qualified Raylib.Util.Colors      as Colors
+import           Raylib.Util.Math        (vectorNormalize, (|*), (|+|), (|-|))
 import           RogueTrooper.Aim        (nearestInBox)
-import           RogueTrooper.Behaviours (bulletSpeed, enemyBehaviour, straightBullet, turretBehaviour)
+import           RogueTrooper.Behaviours (enemyBehaviour, straightBullet,
+                                          turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
-import           RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..), Entity (..),
-                                          EntityId (..), GameState (..), ProjectileType (..))
+import           RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..),
+                                          Entity (..), EntityId (..),
+                                          GameState (..), ProjectileType (..))
 
 screenWidth, screenHeight, targetFps :: Int
 screenWidth = 1280
@@ -32,7 +37,6 @@ initialState =
         Entity
           { eid    = EntityId 0
           , box    = Box (Vector2 640 360) (Circle 60)
-          , speed  = 320
           , vel    = Vector2 0 0
           , script = turretBehaviour
           }
@@ -43,7 +47,7 @@ initialState =
     , score   = 0
     , nextId  = 1
     , spawnTimer    = 0.5
-    , spawnInterval = 1.0
+    , spawnInterval = 0.01
     , seed          = 12345
     }
 
@@ -52,11 +56,11 @@ initialState =
 -- real id. This is the single registry of projectile types.
 mkBullet :: ProjectileType -> Vector2 -> Bullet
 mkBullet pt@(StraightBullet target) origin =
-  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) bulletSpeed (Vector2 0 0) (straightBullet target))
+  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) (Vector2 0 0) (straightBullet target))
 
 -- | Content-side enemy factory handed to the engine's spawner.
 spawnEnemy :: Vector2 -> Entity
-spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) 80 (Vector2 0 0) enemyBehaviour
+spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) (Vector2 0 0) enemyBehaviour
 
 runGame :: IO ()
 runGame =

@@ -49,7 +49,7 @@ data ScriptF next
   | GetTowerPos (Vector2 -> next)             -- ^ query: the tower's position
   | GetEnemies ([(EntityId, Vector2)] -> next) -- ^ query: all enemies (id + position)
   | GetTargetInBox (Maybe (Vector2, Vector2) -> next) -- ^ query: nearest enemy in MY box (pos, velocity)
-  | MoveToward Vector2 next                   -- ^ command: move my box toward a point at my speed
+  | MoveToward Float Vector2 next             -- ^ command: move my box toward a point at a given speed
   | Fire Vector2 ProjectileType next          -- ^ effect: spawn a projectile from a given origin
   | Hit EntityId next                         -- ^ effect: damage the named enemy
   | Expire EntityId next                      -- ^ effect: remove the named entity
@@ -88,10 +88,10 @@ getEnemies = liftF (GetEnemies id)
 getTargetInBox :: Script (Maybe (Vector2, Vector2))
 getTargetInBox = liftF (GetTargetInBox id)
 
--- | Command the engine to move this entity's box toward a point this frame
--- (at the entity's own speed).
-moveToward :: Vector2 -> Script ()
-moveToward target = liftF (MoveToward target ())
+-- | Command the engine to move this entity's box toward a point this frame at
+-- the given speed (units/sec). The script owns the speed.
+moveToward :: Float -> Vector2 -> Script ()
+moveToward speed target = liftF (MoveToward speed target ())
 
 -- | Spawn a projectile of the given type from the given origin.
 fire :: Vector2 -> ProjectileType -> Script ()

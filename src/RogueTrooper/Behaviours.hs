@@ -12,11 +12,13 @@ module RogueTrooper.Behaviours
   , groundLevel
   ) where
 
-import Raylib.Types     (Vector2, pattern Vector2)
-import Raylib.Util.Math (vectorDistance, vectorNormalize, (|*), (|+|), (|-|))
-import RogueTrooper.Script (ProjectileType (..), Script, damage, despawnSelf, fire, getAimPos,
-                            getDt, getEnemies, getMyPos, getTargetInBox, getTowerPos, moveToward,
-                            yield)
+import           Raylib.Types        (Vector2, pattern Vector2)
+import           Raylib.Util.Math    (vectorDistance, vectorNormalize, (|*),
+                                      (|+|), (|-|))
+import           RogueTrooper.Script (ProjectileType (..), Script, damage,
+                                      despawnSelf, fire, getAimPos, getDt,
+                                      getEnemies, getMyPos, getTargetInBox,
+                                      getTowerPos, moveToward, yield)
 
 -- | The y coordinate at which descending enemies are considered landed.
 -- (raylib screen coords: y grows downward.)
@@ -27,18 +29,26 @@ groundLevel = 640
 onLand :: Vector2 -> Bool
 onLand (Vector2 _ y) = y >= groundLevel
 
--- | The turret: every frame, move toward the current aim position, then yield.
--- Purely reactive, expressed as a forever-loop over the DSL.
 -- | Seconds between turret shots (fire rate).
 fireInterval :: Float
-fireInterval = 0.18
+fireInterval = 0.5
 
+-- | How fast the turret box seeks toward the aim box.
+turretSeekSpeed :: Float
+turretSeekSpeed = 320
+
+-- | How fast enemies descend / advance.
+enemySpeed :: Float
+enemySpeed = 80
+
+-- | The turret: seek toward the aim position and fire at locked targets on a
+-- cooldown carried in its own continuation.
 turretBehaviour :: Script ()
 turretBehaviour = turret 0   -- cooldown carried in the continuation, starts ready
   where
     turret cooldown = do
       aim <- getAimPos
-      moveToward aim
+      moveToward turretSeekSpeed aim
       target <- getTargetInBox
       cooldown' <- case target of
         Just (tp, tv) | cooldown <= 0 -> do
@@ -65,7 +75,7 @@ bulletHitRadius = 18
 -- | Speed of fired bullets. Shared by the turret's lead calculation and the
 -- projectile factory so they stay in sync.
 bulletSpeed :: Float
-bulletSpeed = 900
+bulletSpeed = 450
 
 -- | Predict where to aim to hit a moving target: the intercept point given the
 -- bullet's travel time. Two fixed-point iterations refine the estimate.
@@ -87,8 +97,8 @@ enemyBehaviour = forever $ do
   myPos <- getMyPos
   let Vector2 mx _ = myPos
   if onLand myPos
-    then getTowerPos >>= moveToward       -- landed: advance on the tower
-    else moveToward (Vector2 mx groundLevel)  -- airborne: descend straight down
+    then getTowerPos >>= moveToward enemySpeed       -- landed: advance on the tower
+    else moveToward enemySpeed (Vector2 mx groundLevel)  -- airborne: descend straight down
   yield
 
 -- | A dumb projectile that flies toward a fixed aim point, hits the first enemy
@@ -98,7 +108,7 @@ straightBullet :: Vector2 -> Script ()
 straightBullet aim = fly
   where
     fly = do
-      moveToward aim
+      moveToward bulletSpeed aim
       me <- getMyPos
       es <- getEnemies
       case [tid | (tid, p) <- es, vectorDistance me p <= bulletHitRadius] of
