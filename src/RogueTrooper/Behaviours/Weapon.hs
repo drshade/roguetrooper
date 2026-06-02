@@ -8,7 +8,7 @@ module RogueTrooper.Behaviours.Weapon
 
 import           Raylib.Types               (Vector2, pattern Vector2)
 import           Raylib.Util.Math           (magnitude, vectorDistance, vectorNormalize, (|*), (|-|))
-import           RogueTrooper.Behaviours.Common (clampMag, offScreen, onLand, seekAt)
+import           RogueTrooper.Behaviours.Common (offScreen, onLand, seekAt)
 import           RogueTrooper.Script        (EntityId, ProjectileType (..), Script, damage,
                                              despawnSelf, fire, getAimPos, getDt, getEnemies,
                                              getEntityPos, getMyPos, getMyVel, getTargetInBox,
@@ -90,10 +90,13 @@ straightBullet = fly
 
 -- Homing missile -------------------------------------------------------------
 
+-- | missileSpeed = cruise (max) speed the propulsion drives toward the target;
+-- missileResponsiveness = how briskly it accelerates / how hard it homes (must
+-- beat gravity); missileLaunchSpeed = the (slow) speed it leaves the tube at.
 missileSpeed, missileResponsiveness, missileLaunchSpeed, missileKnockback :: Float
-missileSpeed = 520
-missileResponsiveness = 8
-missileLaunchSpeed = 320
+missileSpeed = 600
+missileResponsiveness = 6
+missileLaunchSpeed = 60
 missileKnockback = 380
 
 missileDamage :: Int
@@ -119,8 +122,14 @@ homingMissile target = fly
           despawnSelf
         [] -> do
           mtp <- getEntityPos target
-          maybe (pure ()) (\tp -> steer missileResponsiveness (clampMag missileSpeed (tp |-| me))) mtp
+          -- propulsion: accelerate toward a constant cruise speed in the target's
+          -- direction (no distance-based slowdown), overcoming gravity
+          maybe (pure ()) (\tp -> steer missileResponsiveness (thrustToward me tp)) mtp
           if onLand me || offScreen me then despawnSelf else yield >> fly
+
+    thrustToward me tp =
+      let d = tp |-| me
+       in if magnitude d < 1 then Vector2 0 0 else vectorNormalize d |* missileSpeed
 
 -- | An impulse of the given magnitude in the direction of travel @v@.
 impulseAlong :: Float -> Vector2 -> Vector2
