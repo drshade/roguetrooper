@@ -17,11 +17,11 @@ shouldBeCloseTo (Vector2 ax ay) (Vector2 bx by) =
 
 -- | A turret that does nothing (so step leaves it untouched in enemy tests).
 noopTurret :: Entity
-noopTurret = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 1), vel = Vector2 0 0, script = pure () }
+noopTurret = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 1), vel = Vector2 0 0, hp = 1, script = pure () }
 
--- | An enemy at a position, running the real enemy behaviour.
+-- | An enemy at a position, running the real enemy behaviour (3 HP).
 mkEnemy :: Vector2 -> Entity
-mkEnemy p = Entity { eid = EntityId 9, box = Box p (Circle 12), vel = Vector2 0 0, script = enemyBehaviour }
+mkEnemy p = Entity { eid = EntityId 9, box = Box p (Circle 12), vel = Vector2 0 0, hp = 3, script = enemyBehaviour }
 
 -- | A minimal game state with the given enemies, tower position, and HP.
 -- Spawn timer is parked high so steps don't spawn unless a test lowers it.
@@ -32,11 +32,11 @@ mkGameState es towerP hp =
 
 -- | A trivial projectile factory for tests (inert bullet).
 testBullet :: ProjectileType -> Vector2 -> Bullet
-testBullet pt origin = Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) (Vector2 0 0) (pure ()))
+testBullet pt origin = Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) (Vector2 0 0) 1 (pure ()))
 
 -- | An enemy factory for tests.
 testEnemy :: Vector2 -> Entity
-testEnemy pos = Entity { eid = EntityId 0, box = Box pos (Circle 12), vel = Vector2 0 0, script = enemyBehaviour }
+testEnemy pos = Entity { eid = EntityId 0, box = Box pos (Circle 12), vel = Vector2 0 0, hp = 3, script = enemyBehaviour }
 
 -- | A world with the given dt, aim, and tower; no visible enemies.
 testWorld :: Float -> Vector2 -> Vector2 -> World
@@ -88,7 +88,7 @@ main = hspec $ do
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
 
   describe "turret script (resumable, entity interpreter)" $ do
-    let turretE = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 10), vel = Vector2 0 0, script = turretBehaviour }
+    let turretE = Entity { eid = EntityId 0, box = Box (Vector2 0 0) (Circle 10), vel = Vector2 0 0, hp = 1, script = turretBehaviour }
         gs0     = (mkGameState [] (Vector2 0 0) 10) { turret = turretE }
         world   = testWorld 0.1 (Vector2 100 0) (Vector2 0 0)
     it "moves the turret box toward the aim position (without overshooting) in one frame" $
@@ -142,8 +142,16 @@ main = hspec $ do
     let e1 = (mkEnemy (Vector2 100 100)) { eid = EntityId 1 }
         e2 = (mkEnemy (Vector2 200 200)) { eid = EntityId 2 }
         gs = mkGameState [e1, e2] (Vector2 0 0) 10
-    it "Damage removes the named enemy and increments the score" $ do
-      let gs' = applyEffects testBullet [Damage (EntityId 1)] gs
+    it "lethal Damage kills the named enemy and increments the score" $ do
+      let gs' = applyEffects testBullet [Damage (EntityId 1) 3] gs   -- 3 dmg vs 3 HP
+      map (.eid) gs'.enemies `shouldBe` [EntityId 2]
+      gs'.score `shouldBe` 1
+    it "non-lethal Damage reduces HP without killing or scoring" $ do
+      let gs' = applyEffects testBullet [Damage (EntityId 1) 1] gs   -- 1 dmg vs 3 HP
+      map (\e -> (e.eid, e.hp)) gs'.enemies `shouldBe` [(EntityId 1, 2), (EntityId 2, 3)]
+      gs'.score `shouldBe` 0
+    it "stacked Damage kills only once it reaches 0 HP" $ do
+      let gs' = applyEffects testBullet [Damage (EntityId 1) 2, Damage (EntityId 1) 2] gs
       map (.eid) gs'.enemies `shouldBe` [EntityId 2]
       gs'.score `shouldBe` 1
     it "Despawn removes the named entity" $ do
@@ -158,7 +166,7 @@ main = hspec $ do
     let enemyP        = Vector2 500 500
         mkBulletAt p tgt =
           Bullet (StraightBullet tgt)
-            (Entity { eid = EntityId 2, box = Box p (Circle 4), vel = Vector2 0 0, script = straightBullet tgt })
+            (Entity { eid = EntityId 2, box = Box p (Circle 4), vel = Vector2 0 0, hp = 1, script = straightBullet tgt })
         worldWith es = (testWorld 0.016 (Vector2 0 0) (Vector2 0 0)) { enemyList = es }
     it "damages an enemy within range, scores, and despawns itself" $ do
       let enemy = (mkEnemy enemyP) { eid = EntityId 1 }
@@ -174,7 +182,7 @@ main = hspec $ do
 
   describe "turret firing" $ do
     let towerP   = Vector2 640 700
-        turretE  = Entity { eid = EntityId 0, box = Box (Vector2 100 100) (Circle 60), vel = Vector2 0 0, script = turretBehaviour }
+        turretE  = Entity { eid = EntityId 0, box = Box (Vector2 100 100) (Circle 60), vel = Vector2 0 0, hp = 1, script = turretBehaviour }
         mkGs es  = (mkGameState es towerP 10) { turret = turretE }
         worldWith es = (testWorld 0.016 (Vector2 100 100) towerP) { enemyList = es }
     it "fires a projectile from the tower when an enemy is inside the turret box" $ do

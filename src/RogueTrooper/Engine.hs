@@ -64,7 +64,7 @@ runEntityFrame world ent0 = go ent0 [] ent0.script
       Free (GetTargetInBox k)       -> go ent effs (k (targetInBox ent.box world.enemyList))
       Free (MoveToward speed target next) -> go (moveEntity speed world.dt target ent) effs next
       Free (Fire origin pt next)    -> go ent (Spawn pt origin : effs) next
-      Free (Hit tid next)           -> go ent (Damage tid : effs) next
+      Free (Hit tid amt next)       -> go ent (Damage tid amt : effs) next
       Free (Expire tid next)        -> go ent (Despawn tid : effs) next
 
     -- nearest enemy (position + velocity) inside a box (reusing the tested selector)
@@ -76,9 +76,11 @@ runEntityFrame world ent0 = go ent0 [] ent0.script
 applyEffects :: (ProjectileType -> Vector2 -> Bullet) -> [Effect] -> GameState -> GameState
 applyEffects mk effs gs0 = foldl' apply gs0 effs
   where
-    apply gs (Damage tid) =
-      let (killed, survivors) = partition (\e -> e.eid == tid) gs.enemies
-       in gs { enemies = survivors, score = gs.score + length killed }
+    apply gs (Damage tid amt) =
+      let reduce e        = if e.eid == tid then e { hp = e.hp - amt } else e
+          reduced         = map reduce gs.enemies
+          (dead, alive)   = partition (\e -> e.hp <= 0) reduced
+       in gs { enemies = alive, score = gs.score + length dead }
     apply gs (Despawn tid) =
       gs { enemies = filter (\e -> e.eid /= tid) gs.enemies
          , bullets = filter (\b -> b.entity.eid /= tid) gs.bullets

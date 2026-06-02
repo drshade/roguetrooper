@@ -34,6 +34,7 @@ data Entity = Entity
   { eid    :: EntityId   -- ^ stable identity
   , box    :: Box        -- ^ @center@ = current position; @shape@ = its region
   , vel    :: Vector2    -- ^ last frame's velocity (units/sec), set by the engine on move
+  , hp     :: Int        -- ^ hit points; removed (and scored) when reduced to 0
   , script :: Script ()  -- ^ resumable behaviour continuation
   }
 
@@ -48,7 +49,7 @@ data Bullet = Bullet
 -- a generic fold over these; it has no per-projectile collision logic.
 data Effect
   = Spawn ProjectileType Vector2  -- ^ spawn a projectile (origin injected by the interpreter)
-  | Damage EntityId               -- ^ damage/kill the identified enemy
+  | Damage EntityId Int           -- ^ deal N damage to the identified enemy
   | Despawn EntityId              -- ^ remove the identified entity
   deriving (Eq, Show)
 

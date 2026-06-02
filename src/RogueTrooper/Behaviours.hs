@@ -31,7 +31,7 @@ onLand (Vector2 _ y) = y >= groundLevel
 
 -- | Seconds between turret shots (fire rate).
 fireInterval :: Float
-fireInterval = 0.5
+fireInterval = 0.3
 
 -- | How fast the turret box seeks toward the aim box.
 turretSeekSpeed :: Float
@@ -77,6 +77,10 @@ bulletHitRadius = 18
 bulletSpeed :: Float
 bulletSpeed = 450
 
+-- | Damage a straight bullet deals on hit.
+bulletDamage :: Int
+bulletDamage = 3
+
 -- | Predict where to aim to hit a moving target: the intercept point given the
 -- bullet's travel time. Two fixed-point iterations refine the estimate.
 predictLead :: Vector2 -> Vector2 -> Vector2 -> Float -> Vector2
@@ -112,5 +116,5 @@ straightBullet aim = fly
       me <- getMyPos
       es <- getEnemies
       case [tid | (tid, p) <- es, vectorDistance me p <= bulletHitRadius] of
-        tid : _ -> damage tid >> despawnSelf            -- hit: kill it and remove myself
+        tid : _ -> damage tid bulletDamage >> despawnSelf   -- hit: damage it and remove myself
         []      -> if offScreen me then despawnSelf else yield >> fly

@@ -51,7 +51,7 @@ data ScriptF next
   | GetTargetInBox (Maybe (Vector2, Vector2) -> next) -- ^ query: nearest enemy in MY box (pos, velocity)
   | MoveToward Float Vector2 next             -- ^ command: move my box toward a point at a given speed
   | Fire Vector2 ProjectileType next          -- ^ effect: spawn a projectile from a given origin
-  | Hit EntityId next                         -- ^ effect: damage the named enemy
+  | Hit EntityId Int next                      -- ^ effect: deal N damage to the named enemy
   | Expire EntityId next                      -- ^ effect: remove the named entity
   | Yield next                                -- ^ suspend until the next frame
   deriving (Functor)
@@ -97,9 +97,9 @@ moveToward speed target = liftF (MoveToward speed target ())
 fire :: Vector2 -> ProjectileType -> Script ()
 fire origin pt = liftF (Fire origin pt ())
 
--- | Damage (kill) the named enemy.
-damage :: EntityId -> Script ()
-damage tid = liftF (Hit tid ())
+-- | Deal @amount@ damage to the named enemy.
+damage :: EntityId -> Int -> Script ()
+damage tid amount = liftF (Hit tid amount ())
 
 -- | Remove the named entity from the world.
 despawn :: EntityId -> Script ()

@@ -38,6 +38,7 @@ initialState =
           { eid    = EntityId 0
           , box    = Box (Vector2 640 360) (Circle 60)
           , vel    = Vector2 0 0
+          , hp     = 1
           , script = turretBehaviour
           }
     , enemies = []   -- populated by the spawner
@@ -47,7 +48,7 @@ initialState =
     , score   = 0
     , nextId  = 1
     , spawnTimer    = 0.5
-    , spawnInterval = 0.01
+    , spawnInterval = 0.75
     , seed          = 12345
     }
 
@@ -56,11 +57,12 @@ initialState =
 -- real id. This is the single registry of projectile types.
 mkBullet :: ProjectileType -> Vector2 -> Bullet
 mkBullet pt@(StraightBullet target) origin =
-  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) (Vector2 0 0) (straightBullet target))
+  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) (Vector2 0 0) 1 (straightBullet target))
 
--- | Content-side enemy factory handed to the engine's spawner.
+-- | Content-side enemy factory handed to the engine's spawner. Normal enemies
+-- have 3 hit points.
 spawnEnemy :: Vector2 -> Entity
-spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) (Vector2 0 0) enemyBehaviour
+spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
 
 runGame :: IO ()
 runGame =
@@ -80,6 +82,7 @@ frame gs = do
     renderBarrel gs'.tower gs'.turret.box.center
     renderTower gs'
     mapM_ (renderBox Colors.red . (.box)) gs'.enemies
+    mapM_ renderEnemyHp gs'.enemies
     mapM_ (renderBox Colors.gold . (.box) . (.entity)) gs'.bullets
     renderBox Colors.lime gs'.turret.box
     renderLockOn gs'
@@ -98,6 +101,12 @@ renderBox col box = case box.shape of
   Oval rx ry ->
     let Vector2 cx cy = box.center
      in drawEllipseLines (round cx) (round cy) rx ry col
+
+-- | Debug overlay: draw an enemy's remaining HP in the centre of its circle.
+renderEnemyHp :: Entity -> IO ()
+renderEnemyHp e =
+  let Vector2 cx cy = e.box.center
+   in drawText (show e.hp) (round cx - 4) (round cy - 8) 16 Colors.rayWhite
 
 -- | Draw the mouse aim box: a circle with a crosshair.
 renderAimBox :: Vector2 -> IO ()
