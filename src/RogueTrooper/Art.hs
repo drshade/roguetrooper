@@ -81,25 +81,29 @@ renderMissile (Vector2 cx cy) (Vector2 vx vy) = do
 
 -- Paratroopers ---------------------------------------------------------------
 
--- | A descending paratrooper: canopy + strings + trooper.
+-- | A descending paratrooper: a big canopy + strings + trooper.
 paratrooperSprite :: Sprite
 paratrooperSprite = Sprite
   [('r', Colors.maroon), ('s', Colors.lightGray), ('h', Colors.beige), ('b', Colors.green)]
-  [ "  rrrrr  "
-  , " rrrrrrr "
-  , "rrrrrrrrr"
-  , " s s s s "
-  , "    h    "
-  , "   bbb   "
-  , "   b b   "
+  [ "    rrrrrrr    "
+  , "  rrrrrrrrrrr  "
+  , " rrrrrrrrrrrrr "
+  , "rrrrrrrrrrrrrrr"
+  , " rrrrrrrrrrrrr "
+  , "  s s s s s s  "
+  , "    s  s  s    "
+  , "      hhh      "
+  , "     bbbbb     "
+  , "     bbbbb     "
+  , "     b   b     "
   ]
 
 -- | A grounded trooper (no canopy).
 trooperSprite :: Sprite
 trooperSprite = Sprite
   [('h', Colors.beige), ('b', Colors.green)]
-  [ "  hh  "
-  , " bbbb "
-  , " bbbb "
-  , " b  b "
+  [ "  hhh  "
+  , " bbbbb "
+  , " bbbbb "
+  , " b   b "
   ]
