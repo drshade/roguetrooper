@@ -90,13 +90,14 @@ straightBullet = fly
 
 -- Homing missile -------------------------------------------------------------
 
--- | missileSpeed = cruise (max) speed the propulsion drives toward the target;
--- missileResponsiveness = how briskly it accelerates / how hard it homes (must
--- beat gravity); missileLaunchSpeed = the (slow) speed it leaves the tube at.
+-- | missileSpeed = cruise (max) speed the propulsion builds to; missileLaunchSpeed
+-- = the speed it pops out of the tube at; missileResponsiveness = how briskly it
+-- accelerates / how hard it homes (lower = slower build, but more gravity droop:
+-- droop ≈ gravity / missileResponsiveness).
 missileSpeed, missileResponsiveness, missileLaunchSpeed, missileKnockback :: Float
-missileSpeed = 600
-missileResponsiveness = 6
-missileLaunchSpeed = 60
+missileSpeed = 950
+missileResponsiveness = 4
+missileLaunchSpeed = 250
 missileKnockback = 380
 
 missileDamage :: Int
