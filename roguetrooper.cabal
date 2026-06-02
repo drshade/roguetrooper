@@ -27,6 +27,7 @@ library
     Prelude
     RogueTrooper
     RogueTrooper.Aim
+    RogueTrooper.Art
     RogueTrooper.Behaviours
     RogueTrooper.Behaviours.Common
     RogueTrooper.Behaviours.Enemy

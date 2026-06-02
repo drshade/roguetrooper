@@ -10,15 +10,15 @@ import qualified Data.Map.Strict         as Map
 import           Raylib.Core             (clearBackground, getFPS, getFrameTime,
                                           getMousePosition)
 import           Raylib.Core.Shapes      (drawCircleLinesV, drawEllipseLines,
-                                          drawLineV, drawRectangleLinesEx,
-                                          drawRectanglePro, drawRectangleV)
+                                          drawLineV, drawRectangleLinesEx)
 import           Raylib.Core.Text        (drawText)
 import           Raylib.Types            (Color, Vector2, pattern Rectangle,
                                           pattern Vector2)
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
-import           Raylib.Util.Math        ((|-|))
 import           RogueTrooper.Aim        (nearestInBox)
+import           RogueTrooper.Art        (drawSprite, paratrooperSprite, renderMissile,
+                                          renderTurret, trooperSprite)
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
                                           missionDirector, straightBullet,
                                           turretBehaviour)
@@ -97,13 +97,17 @@ renderGround :: IO ()
 renderGround =
   drawLineV (Vector2 0 groundLevel) (Vector2 (fromIntegral screenWidth) groundLevel) Colors.darkGray
 
--- | Draw a single entity, coloured/annotated by its kind.
+-- | Draw a single entity by its kind.
 renderEntity :: Entity -> IO ()
 renderEntity e = case e.kind of
-  Turret       -> renderBox Colors.lime e.box
-  Enemy        -> renderBox Colors.red e.box >> renderEnemyHp e
-  Projectile _ -> renderBox Colors.gold e.box
-  Director     -> pure ()                       -- invisible mission script
+  Turret                         -> renderBox Colors.lime e.box   -- scanbox reticle
+  Enemy                          -> do
+    let Vector2 _ y = e.box.center
+    drawSprite e.box.center (if y >= groundLevel then trooperSprite else paratrooperSprite)
+    renderEnemyHp e
+  Projectile (StraightBullet _)  -> renderBox Colors.gold e.box
+  Projectile (HomingMissile _ _) -> renderMissile e.box.center e.vel
+  Director                       -> pure ()                       -- invisible mission script
 
 -- | Draw the targeting-region outline for a box, by shape.
 renderBox :: Color -> Box -> IO ()
@@ -138,51 +142,3 @@ renderLockOn scanbox enemies =
     Just p  -> drawCircleLinesV p 20 Colors.yellow
     Nothing -> pure ()
 
--- 8-bit turret sprite ---------------------------------------------------------
-
--- | Screen size of one art pixel.
-artPx :: Float
-artPx = 4
-
--- | Draw a pixel sprite (rows of chars; ' ' = transparent) centred on a point,
--- each non-space char looked up in the palette and drawn as one art pixel.
-drawSprite :: Vector2 -> [(Char, Color)] -> [String] -> IO ()
-drawSprite (Vector2 cx cy) palette rows =
-  sequence_
-    [ drawRectangleV (Vector2 (x0 + fromIntegral col * artPx) (y0 + fromIntegral row * artPx))
-                     (Vector2 artPx artPx) c
-    | (row, line) <- zip [0 :: Int ..] rows
-    , (col, ch)   <- zip [0 :: Int ..] line
-    , c           <- maybe [] pure (lookup ch palette)
-    ]
-  where
-    h  = length rows
-    w  = maximum (map length rows)
-    x0 = cx - fromIntegral w * artPx / 2
-    y0 = cy - fromIntegral h * artPx / 2
-
-turretPalette :: [(Char, Color)]
-turretPalette = [('d', Colors.darkGray), ('G', Colors.gray), ('L', Colors.lightGray)]
-
-turretRows :: [String]
-turretRows =
-  [ "  dGGd  "
-  , " dGLLGd "
-  , "dGLLLLGd"
-  , "dGGGGGGd"
-  , "dGGGGGGd"
-  , "ddGGGGdd"
-  ]
-
--- | The 8-bit turret: a base/dome at the tower with a barrel that swivels to
--- point at the scanbox.
-renderTurret :: Vector2 -> Vector2 -> IO ()
-renderTurret tower scan = do
-  let Vector2 dx dy = scan |-| tower
-      angle = atan2 dy dx * 180 / pi
-      Vector2 ptx pty = tower
-      -- a barrel segment rotating about the tower (pivot at its inner edge)
-      bar len th col = drawRectanglePro (Rectangle ptx pty len th) (Vector2 0 (th / 2)) angle col
-  bar 34 12 Colors.darkGray    -- barrel body (its dark end reads as a muzzle)
-  bar 28 5  Colors.lightGray   -- highlight stripe, shorter so a muzzle shows
-  drawSprite tower turretPalette turretRows
