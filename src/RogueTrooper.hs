@@ -18,7 +18,8 @@ import           Raylib.Types            (Color, Vector2, pattern Rectangle,
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
 import           Raylib.Util.Math        (vectorNormalize, (|*), (|+|), (|-|))
-import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel,
+import           RogueTrooper.Aim        (nearestInBox)
+import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
                                           missionDirector, straightBullet,
                                           turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
@@ -52,8 +53,9 @@ initialState =
 -- to an assembled entity (its kind, behaviour script, shape). The engine assigns
 -- the real id. This is the single registry of projectile types.
 mkProjectile :: ProjectileType -> Vector2 -> Entity
-mkProjectile pt@(StraightBullet v) origin =
-  Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
+mkProjectile pt origin = case pt of
+  StraightBullet v    -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
+  HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
 -- have 3 hit points.
@@ -74,6 +76,7 @@ frame gs = do
       world     = World dt mouse gs.tower worldGravity groundLevel enemyList mkProjectile spawnEnemy
       gs'       = step world gs
       ents      = Map.elems gs'.entities
+      enemies   = [e | e <- ents, e.kind == Enemy]
       mTurret   = find (\e -> e.kind == Turret) ents
   drawing $ do
     clearBackground Colors.black
@@ -81,6 +84,7 @@ frame gs = do
     maybe (pure ()) (\t -> renderBarrel gs'.tower t.box.center) mTurret
     renderTower gs'
     mapM_ renderEntity ents
+    maybe (pure ()) (\t -> renderLockOn t.box enemies) mTurret
     renderAimBox mouse
     drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
     fps <- getFPS
@@ -126,6 +130,13 @@ renderAimBox m = do
   drawCircleLinesV m 14 Colors.rayWhite
   drawLineV (Vector2 (mx - k) my) (Vector2 (mx + k) my) Colors.rayWhite
   drawLineV (Vector2 mx (my - k)) (Vector2 mx (my + k)) Colors.rayWhite
+
+-- | Draw a lock-on marker on the enemy the turret is currently targeting.
+renderLockOn :: Box -> [Entity] -> IO ()
+renderLockOn scanbox enemies =
+  case nearestInBox scanbox [(e.box.center, e.box.center) | e <- enemies] of
+    Just p  -> drawCircleLinesV p 20 Colors.yellow
+    Nothing -> pure ()
 
 -- | Draw the turret barrel: a thick stub from the tower pointing at the scanbox.
 renderBarrel :: Vector2 -> Vector2 -> IO ()

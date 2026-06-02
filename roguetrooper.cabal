@@ -28,6 +28,10 @@ library
     RogueTrooper
     RogueTrooper.Aim
     RogueTrooper.Behaviours
+    RogueTrooper.Behaviours.Common
+    RogueTrooper.Behaviours.Enemy
+    RogueTrooper.Behaviours.Mission
+    RogueTrooper.Behaviours.Weapon
     RogueTrooper.Engine
     RogueTrooper.Script
     RogueTrooper.Types

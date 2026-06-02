@@ -58,6 +58,7 @@ runEntityFrame world ent = go [] ent.script
       Free (GetTowerPos k)          -> go evs (k world.towerPos)
       Free (GetGravity k)           -> go evs (k world.gravity)
       Free (GetEnemies k)           -> go evs (k [(i, p) | (i, p, _) <- world.enemyList])
+      Free (GetEntityPos tid k)     -> go evs (k (lookup tid [(i, p) | (i, p, _) <- world.enemyList]))
       Free (GetTargetInBox k)       -> go evs (k (targetInBox ent.box world.enemyList))
       Free (DoSteer resp tgt next)  -> go (Steer ent.eid resp tgt : evs) next
       Free (DoSetVel v next)        -> go (SetVel ent.eid v : evs) next
@@ -67,7 +68,7 @@ runEntityFrame world ent = go [] ent.script
       Free (Hit tid amt next)       -> go (Damage tid amt : evs) next
       Free (Expire tid next)        -> go (Despawn tid : evs) next
 
-    targetInBox b enemies = nearestInBox b [((p, v), p) | (_, p, v) <- enemies]
+    targetInBox b enemies = nearestInBox b [((i, p), p) | (i, p, _) <- enemies]
 
 -- | Fold a frame's events into the world: ease/set/impulse velocities, store
 -- continuations, spawn projectiles and enemies (fresh ids), damage (kill + score

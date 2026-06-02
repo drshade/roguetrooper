@@ -20,6 +20,7 @@ module RogueTrooper.Script
   , getTowerPos
   , getGravity
   , getEnemies
+  , getEntityPos
   , getTargetInBox
   , steer
   , setVel
@@ -42,7 +43,8 @@ newtype EntityId = EntityId Int
 -- | The kinds of projectile the turret can fire. Each variant carries the data
 -- its behaviour needs, and drives which script it runs and how it is rendered.
 data ProjectileType
-  = StraightBullet Vector2   -- ^ launched with this initial velocity (then ballistic under gravity)
+  = StraightBullet Vector2          -- ^ launched with this initial velocity (then ballistic under gravity)
+  | HomingMissile EntityId Vector2  -- ^ homes on the target enemy; launched with this initial velocity
   deriving (Eq, Show)
 
 -- | The instruction set. Grows on demand as behaviours need new verbs.
@@ -55,7 +57,8 @@ data ScriptF next
   | GetTowerPos (Vector2 -> next)             -- ^ query: the tower's position
   | GetGravity (Vector2 -> next)              -- ^ query: the world gravity vector
   | GetEnemies ([(EntityId, Vector2)] -> next) -- ^ query: all enemies (id + position)
-  | GetTargetInBox (Maybe (Vector2, Vector2) -> next) -- ^ query: nearest enemy in MY box (pos, velocity)
+  | GetEntityPos EntityId (Maybe Vector2 -> next) -- ^ query: an enemy's current position by id (if alive)
+  | GetTargetInBox (Maybe (EntityId, Vector2) -> next) -- ^ query: nearest enemy in MY box (id, position)
   | DoSteer Float Vector2 next                -- ^ command: ease my velocity toward a target (responsiveness, target velocity)
   | DoSetVel Vector2 next                     -- ^ command: hard-set my velocity (kinematic — no forces/easing)
   | DoPush EntityId Vector2 next              -- ^ effect: apply an impulse (Δv) to an entity
@@ -101,9 +104,12 @@ getGravity = liftF (GetGravity id)
 getEnemies :: Script [(EntityId, Vector2)]
 getEnemies = liftF (GetEnemies id)
 
--- | Query the position and velocity of the nearest enemy inside this entity's
--- own box, if any.
-getTargetInBox :: Script (Maybe (Vector2, Vector2))
+-- | Query an enemy's current position by id (Nothing if it's no longer alive).
+getEntityPos :: EntityId -> Script (Maybe Vector2)
+getEntityPos tid = liftF (GetEntityPos tid id)
+
+-- | Query the id and position of the nearest enemy inside this entity's own box.
+getTargetInBox :: Script (Maybe (EntityId, Vector2))
 getTargetInBox = liftF (GetTargetInBox id)
 
 -- | Ease this entity's velocity toward a target velocity, at the given

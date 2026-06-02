@@ -2,8 +2,8 @@ module Main where
 
 import qualified Data.Map.Strict     as Map
 import           RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, launchToHit,
-                                          missionDirector, predictLead, straightBullet,
+import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
+                                          launchToHit, missionDirector, straightBullet,
                                           turretBehaviour, wait)
 import           RogueTrooper.Engine     (World (..), applyEvents, integrate,
                                           resolveTowerHits, step)
@@ -36,8 +36,9 @@ directorWith :: Script () -> Entity
 directorWith scr = Entity (EntityId 5) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 scr
 
 testProjectile :: ProjectileType -> Vector2 -> Entity
-testProjectile pt@(StraightBullet v) origin =
-  Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
+testProjectile pt origin = case pt of
+  StraightBullet v    -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
+  HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
 
 testEnemyFactory :: Vector2 -> Entity
 testEnemyFactory p = Entity (EntityId 0) Enemy (Box p (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
@@ -110,11 +111,6 @@ main = hspec $ do
       nearestInBox box [(1 :: Int, Vector2 4 0), (2, Vector2 1 0), (3, Vector2 3 0)] `shouldBe` Just 2
     it "breaks ties by list order (earliest wins)" $
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
-
-  describe "predictLead" $
-    it "leads along the target's velocity by the bullet travel time" $
-      predictLead (Vector2 0 0) (Vector2 100 0) (Vector2 0 50) 100
-        `shouldSatisfy` (\(Vector2 x y) -> x == 100 && y > 45 && y < 65)
 
   describe "launchToHit (ballistic firing solution)" $ do
     it "produces a launch that lands exactly on the target under gravity" $
@@ -212,12 +208,34 @@ main = hspec $ do
           gs' = step (worldWith []) gs
       Map.member (EntityId 2) gs'.entities `shouldBe` False
 
-  describe "turret firing" $
-    it "fires a ballistic projectile toward the scanbox each shot" $ do
-      let towerP  = Vector2 640 620
-          turretE = turretAt (EntityId 0) (Vector2 100 100) 60
-          gs'     = step (testWorld 0.016 (Vector2 100 100) towerP) (mkGameState [turretE] towerP 10)
+  describe "turret firing (homing missile)" $ do
+    let towerP       = Vector2 640 620
+        turretE      = turretAt (EntityId 0) (Vector2 100 100) 60
+        worldWith es = (testWorld 0.016 (Vector2 100 100) towerP) { enemyList = es }
+    it "fires a missile at a locked target in the scanbox" $ do
+      let gs' = step (worldWith [(EntityId 1, Vector2 110 110, Vector2 0 0)])
+                     (mkGameState [turretE, mkEnemyAt (EntityId 1) (Vector2 110 110)] towerP 10)
       length (projectilesOf gs') `shouldBe` 1
+    it "holds fire when there is no target in the scanbox" $ do
+      let gs' = step (worldWith []) (mkGameState [turretE] towerP 10)
+      length (projectilesOf gs') `shouldBe` 0
+
+  describe "homingMissile" $ do
+    let towerP       = Vector2 640 620
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+        missile i p tgt v = Entity i (Projectile (HomingMissile tgt v)) (Box p (Circle 6)) v 1 (homingMissile tgt)
+    it "detonates on an overlapping enemy: damage, kill, despawn" $ do
+      let enemyP = Vector2 500 500
+          gs  = mkGameState [mkEnemyAt (EntityId 1) enemyP, missile (EntityId 2) enemyP (EntityId 1) (Vector2 100 0)] towerP 10
+          gs' = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
+      Map.member (EntityId 1) gs'.entities `shouldBe` False   -- 3 dmg vs 3 hp
+      gs'.score `shouldBe` 1
+      Map.member (EntityId 2) gs'.entities `shouldBe` False   -- missile spent
+    it "homes toward its target (steers toward it)" $ do
+      let enemyP = Vector2 500 200
+          gs  = mkGameState [mkEnemyAt (EntityId 1) enemyP, missile (EntityId 2) (Vector2 300 400) (EntityId 1) (Vector2 0 0)] towerP 10
+          gs' = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
+      velOf (EntityId 2) gs' `shouldSatisfy` maybe False (\(Vector2 vx _) -> vx > 0)
 
   describe "wait + spawnEnemyAt (sequential mission scripting)" $ do
     let world = testWorld 0.1 (Vector2 0 0) (Vector2 640 620)
