@@ -2,6 +2,6 @@ module Prelude
   ( module RerebasePrelude
   ) where
 
--- 'yield' (thread yield, from Control.Concurrent) is hidden so the scripting
--- DSL can use it as a core verb (RogueTrooper.Script.yield = suspend a script).
-import RerebasePrelude hiding (yield)
+-- 'yield' (thread yield) and 'magnitude' (Data.Complex) are hidden so the game
+-- can use them for the scripting DSL and vector math (Raylib.Util.Math.magnitude).
+import RerebasePrelude hiding (magnitude, yield)

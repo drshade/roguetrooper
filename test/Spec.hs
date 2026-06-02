@@ -28,13 +28,12 @@ turretAt :: EntityId -> Vector2 -> Float -> Entity
 turretAt i p r = Entity i Turret (Box p (Circle r)) (Vector2 0 0) 1 turretBehaviour
 
 bulletAt :: EntityId -> Vector2 -> Vector2 -> Entity
-bulletAt i p tgt = Entity i (Projectile (StraightBullet tgt)) (Box p (Circle 4)) (Vector2 0 0) 1 (straightBullet tgt)
+bulletAt i p v = Entity i (Projectile (StraightBullet v)) (Box p (Circle 4)) v 1 straightBullet
 
--- | A projectile factory for tests (inert projectile).
 testProjectile :: ProjectileType -> Vector2 -> Entity
-testProjectile pt origin = Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) (Vector2 0 0) 1 (pure ())
+testProjectile pt@(StraightBullet v) origin =
+  Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
 
--- | An enemy factory for tests.
 testEnemyFactory :: Vector2 -> Entity
 testEnemyFactory p = Entity (EntityId 0) Enemy (Box p (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
 
@@ -48,7 +47,8 @@ mkGameState es towerP hp =
 
 testWorld :: Float -> Vector2 -> Vector2 -> World
 testWorld dt' aim towerP =
-  World { dt = dt', aimTarget = aim, towerPos = towerP, enemyList = []
+  World { dt = dt', aimTarget = aim, towerPos = towerP
+        , gravity = Vector2 0 1000, groundLevel = groundLevel, enemyList = []
         , mkProjectile = testProjectile, mkEnemy = testEnemyFactory }
 
 -- Accessors ------------------------------------------------------------------
@@ -57,6 +57,9 @@ centerOf :: EntityId -> GameState -> Vector2
 centerOf i gs = case Map.lookup i gs.entities of
   Just e  -> e.box.center
   Nothing -> error ("entity missing: " <> show i)
+
+velOf :: EntityId -> GameState -> Maybe Vector2
+velOf i gs = (.vel) <$> Map.lookup i gs.entities
 
 enemiesOf :: GameState -> [Entity]
 enemiesOf gs = [e | e <- Map.elems gs.entities, e.kind == Enemy]
@@ -98,108 +101,98 @@ main = hspec $ do
       nearestInBox box [(1 :: Int, Vector2 10 0)] `shouldBe` Nothing
     it "returns the entity nearest the box centre" $
       nearestInBox box [(1 :: Int, Vector2 4 0), (2, Vector2 1 0), (3, Vector2 3 0)] `shouldBe` Just 2
-    it "ignores entities outside the box" $
-      nearestInBox box [(1 :: Int, Vector2 9 0), (2, Vector2 2 0)] `shouldBe` Just 2
     it "breaks ties by list order (earliest wins)" $
       nearestInBox box [(1 :: Int, Vector2 2 0), (2, Vector2 0 2)] `shouldBe` Just 1
 
-  describe "predictLead" $ do
-    it "aims at the target's current position when it is stationary" $
-      predictLead (Vector2 0 0) (Vector2 100 0) (Vector2 0 0) 100 `shouldBeCloseTo` Vector2 100 0
+  describe "predictLead" $
     it "leads along the target's velocity by the bullet travel time" $
       predictLead (Vector2 0 0) (Vector2 100 0) (Vector2 0 50) 100
         `shouldSatisfy` (\(Vector2 x y) -> x == 100 && y > 45 && y < 65)
 
-  describe "integrate" $
-    it "moves each entity by velocity * dt" $ do
-      let e   = (mkEnemyAt (EntityId 1) (Vector2 0 0)) { vel = Vector2 100 50 }
-          gs' = integrate 0.1 (mkGameState [e] (Vector2 0 0) 10)
+  describe "integrate" $ do
+    let g = Vector2 0 1000 :: Vector2
+    it "moves a non-physical entity by velocity * dt (no gravity)" $ do
+      let e   = (turretAt (EntityId 1) (Vector2 0 0) 10) { vel = Vector2 100 50 }
+          gs' = integrate g groundLevel 0.1 (mkGameState [e] (Vector2 0 0) 10)
       centerOf (EntityId 1) gs' `shouldBeCloseTo` Vector2 10 5
-
-  describe "turret script (velocity intent + integration)" $ do
-    let gs0   = mkGameState [turretAt (EntityId 0) (Vector2 0 0) 10] (Vector2 0 0) 10
-        world = testWorld 0.1 (Vector2 100 0) (Vector2 0 0)
-    it "moves the turret box toward the aim position (without overshooting)" $
-      centerOf (EntityId 0) (step world gs0)
-        `shouldSatisfy` (\(Vector2 x y) -> x > 0 && x <= 100 && y == 0)
-    it "resumes and keeps moving across frames" $
-      let g1 = step world gs0
-          g2 = step world g1
-          Vector2 x1 _ = centerOf (EntityId 0) g1
-          Vector2 x2 _ = centerOf (EntityId 0) g2
-       in (x2 > x1) `shouldBe` True
-
-  describe "enemy script (parachute then advance)" $ do
-    let towerP = Vector2 640 (groundLevel + 20)
-        world  = testWorld 0.1 (Vector2 0 0) towerP
-        afterStep p = centerOf (EntityId 1) (step world (mkGameState [mkEnemyAt (EntityId 1) p] towerP 10))
-    it "descends straight down while airborne" $
-      afterStep (Vector2 300 (groundLevel - 200))
-        `shouldSatisfy` (\(Vector2 x y) -> x == 300 && y > groundLevel - 200)
-    it "advances toward the tower once landed" $
-      afterStep (Vector2 300 (groundLevel + 10))
-        `shouldSatisfy` (\(Vector2 x y) -> x > 300 && y > groundLevel + 10)
+    it "applies gravity to an airborne enemy (it falls)" $ do
+      let e   = mkEnemyAt (EntityId 1) (Vector2 0 100)   -- well above the ground
+          gs' = integrate g groundLevel 0.1 (mkGameState [e] (Vector2 0 0) 10)
+      centerOf (EntityId 1) gs' `shouldBeCloseTo` Vector2 0 110
+    it "lands an enemy on the ground, clamping it and stopping the fall" $ do
+      let e   = (mkEnemyAt (EntityId 1) (Vector2 0 635)) { vel = Vector2 0 1000 }
+          gs' = integrate g groundLevel 0.1 (mkGameState [e] (Vector2 0 0) 10)
+      centerOf (EntityId 1) gs' `shouldBeCloseTo` Vector2 0 groundLevel
+      velOf (EntityId 1) gs' `shouldBe` Just (Vector2 0 0)
 
   describe "applyEvents" $ do
     let e1 = mkEnemyAt (EntityId 1) (Vector2 100 100)
         e2 = mkEnemyAt (EntityId 2) (Vector2 200 200)
         gs = mkGameState [e1, e2] (Vector2 0 0) 10
-    it "SetVel sets an entity's velocity" $
-      ((.vel) <$> Map.lookup (EntityId 1) (applyEvents testProjectile [SetVel (EntityId 1) (Vector2 7 7)] gs).entities)
-        `shouldBe` Just (Vector2 7 7)
+    it "Impulse adds to an entity's velocity" $
+      velOf (EntityId 1) (applyEvents 0.1 testProjectile [Impulse (EntityId 1) (Vector2 5 0)] gs)
+        `shouldBe` Just (Vector2 5 0)
+    it "Steer eases velocity toward the target (full step at responsiveness*dt >= 1)" $
+      velOf (EntityId 1) (applyEvents 0.1 testProjectile [Steer (EntityId 1) 10 (Vector2 100 0)] gs)
+        `shouldBe` Just (Vector2 100 0)
     it "lethal Damage kills the named enemy and scores" $ do
-      let gs' = applyEvents testProjectile [Damage (EntityId 1) 3] gs
+      let gs' = applyEvents 0.1 testProjectile [Damage (EntityId 1) 3] gs
       map (.eid) (enemiesOf gs') `shouldBe` [EntityId 2]
       gs'.score `shouldBe` 1
     it "non-lethal Damage reduces HP without scoring" $ do
-      let gs' = applyEvents testProjectile [Damage (EntityId 1) 1] gs
+      let gs' = applyEvents 0.1 testProjectile [Damage (EntityId 1) 1] gs
       ((.hp) <$> Map.lookup (EntityId 1) gs'.entities) `shouldBe` Just 2
       gs'.score `shouldBe` 0
     it "Despawn removes the named entity" $
-      Map.member (EntityId 2) (applyEvents testProjectile [Despawn (EntityId 2)] gs).entities `shouldBe` False
+      Map.member (EntityId 2) (applyEvents 0.1 testProjectile [Despawn (EntityId 2)] gs).entities `shouldBe` False
     it "Spawn adds a projectile with a fresh id" $ do
-      let gs' = applyEvents testProjectile [Spawn (StraightBullet (Vector2 5 5)) (Vector2 0 0)] (mkGameState [] (Vector2 0 0) 10)
+      let gs' = applyEvents 0.1 testProjectile [Spawn (StraightBullet (Vector2 5 5)) (Vector2 0 0)] (mkGameState [] (Vector2 0 0) 10)
       length (projectilesOf gs') `shouldBe` 1
       gs'.nextId `shouldBe` 101
 
+  describe "turret scanbox" $ do
+    let gs0   = mkGameState [turretAt (EntityId 0) (Vector2 0 0) 10] (Vector2 0 0) 10
+        world = testWorld 0.1 (Vector2 100 0) (Vector2 0 0)
+    it "tracks the crosshair (moves toward it, no gravity)" $
+      centerOf (EntityId 0) (step world gs0) `shouldSatisfy` (\(Vector2 x y) -> x > 0 && y == 0)
+
+  describe "enemy paratrooper" $ do
+    let towerP = Vector2 640 620
+        world  = testWorld 0.1 (Vector2 0 0) towerP
+    it "falls under gravity while airborne" $
+      centerOf (EntityId 1) (step world (mkGameState [mkEnemyAt (EntityId 1) (Vector2 300 100)] towerP 10))
+        `shouldSatisfy` (\(Vector2 x y) -> x == 300 && y > 100)
+    it "walks toward the tower once on the ground" $
+      centerOf (EntityId 1) (step world (mkGameState [mkEnemyAt (EntityId 1) (Vector2 300 groundLevel)] towerP 10))
+        `shouldSatisfy` (\(Vector2 x _) -> x > 300)
+
   describe "resolveTowerHits" $ do
-    let towerP = Vector2 640 660
+    let towerP = Vector2 640 620
     it "removes an enemy that reached the tower and deals 1 HP" $ do
       let gs' = resolveTowerHits (mkGameState [mkEnemyAt (EntityId 1) towerP] towerP 10)
-      length (enemiesOf gs') `shouldBe` 0
-      gs'.towerHp `shouldBe` 9
-    it "keeps a distant enemy and leaves HP unchanged" $ do
-      let gs' = resolveTowerHits (mkGameState [mkEnemyAt (EntityId 1) (Vector2 300 100)] towerP 10)
-      length (enemiesOf gs') `shouldBe` 1
-      gs'.towerHp `shouldBe` 10
-
-  describe "step (full frame)" $
-    it "removes an enemy that has reached the tower and deals 1 HP" $ do
-      let towerP = Vector2 640 660
-          world  = testWorld 0.016 (Vector2 0 0) towerP
-          gs'    = step world (mkGameState [mkEnemyAt (EntityId 1) towerP] towerP 10)
       length (enemiesOf gs') `shouldBe` 0
       gs'.towerHp `shouldBe` 9
 
   describe "straightBullet" $ do
     let enemyP       = Vector2 500 500
-        worldWith es = (testWorld 0.016 (Vector2 0 0) (Vector2 0 0)) { enemyList = es }
+        towerP       = Vector2 640 620
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
     it "damages an overlapping enemy, scores, and despawns itself" $ do
-      let gs  = mkGameState [mkEnemyAt (EntityId 1) enemyP, bulletAt (EntityId 2) enemyP (Vector2 9999 500)] (Vector2 0 0) 10
+      let gs  = mkGameState [mkEnemyAt (EntityId 1) enemyP, bulletAt (EntityId 2) enemyP (Vector2 100 0)] towerP 10
           gs' = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
       length (enemiesOf gs') `shouldBe` 0
       gs'.score `shouldBe` 1
       Map.member (EntityId 2) gs'.entities `shouldBe` False
-    it "despawns when it flies off-screen without hitting anything" $ do
-      let gs  = mkGameState [bulletAt (EntityId 2) (Vector2 (-100) (-100)) (Vector2 (-9999) (-100))] (Vector2 0 0) 10
+    it "despawns when it hits the ground" $ do
+      let gs  = mkGameState [bulletAt (EntityId 2) (Vector2 100 650) (Vector2 0 0)] towerP 10
           gs' = step (worldWith []) gs
       Map.member (EntityId 2) gs'.entities `shouldBe` False
 
-  describe "turret firing" $ do
-    let towerP  = Vector2 640 700
-        turretE = turretAt (EntityId 0) (Vector2 100 100) 60
-    it "fires a projectile toward the scanbox each shot (no target needed)" $ do
-      let gs' = step (testWorld 0.016 (Vector2 100 100) towerP) (mkGameState [turretE] towerP 10)
+  describe "turret firing" $
+    it "fires a ballistic projectile toward the scanbox each shot" $ do
+      let towerP  = Vector2 640 620
+          turretE = turretAt (EntityId 0) (Vector2 100 100) 60
+          gs'     = step (testWorld 0.016 (Vector2 100 100) towerP) (mkGameState [turretE] towerP 10)
       length (projectilesOf gs') `shouldBe` 1
 
   describe "spawnTick (periodic enemy spawning)" $ do

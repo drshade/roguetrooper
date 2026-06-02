@@ -18,8 +18,8 @@ import           Raylib.Types            (Color, Vector2, pattern Rectangle,
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
 import           Raylib.Util.Math        (vectorNormalize, (|*), (|+|), (|-|))
-import           RogueTrooper.Behaviours (enemyBehaviour, straightBullet,
-                                          turretBehaviour)
+import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel,
+                                          straightBullet, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Types       (Box (..), BoxShape (..), Entity (..),
                                           EntityId (..), EntityKind (..),
@@ -30,11 +30,15 @@ screenWidth = 1280
 screenHeight = 720
 targetFps = 600
 
+-- | Downward acceleration applied to airborne physical entities (px/s²).
+worldGravity :: Vector2
+worldGravity = Vector2 0 900
+
 initialState :: GameState
 initialState =
   GameState
     { entities      = Map.fromList [(EntityId 0, turret)]
-    , tower         = Vector2 640 660
+    , tower         = Vector2 640 620   -- just above the ground line
     , towerHp       = 10
     , score         = 0
     , nextId        = 1
@@ -49,8 +53,8 @@ initialState =
 -- to an assembled entity (its kind, behaviour script, shape). The engine assigns
 -- the real id. This is the single registry of projectile types.
 mkProjectile :: ProjectileType -> Vector2 -> Entity
-mkProjectile pt@(StraightBullet target) origin =
-  Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) (Vector2 0 0) 1 (straightBullet target)
+mkProjectile pt@(StraightBullet v) origin =
+  Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
 -- have 3 hit points.
@@ -68,12 +72,13 @@ frame gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
   let enemyList = [(e.eid, e.box.center, e.vel) | e <- Map.elems gs.entities, e.kind == Enemy]
-      world     = World dt mouse gs.tower enemyList mkProjectile spawnEnemy
+      world     = World dt mouse gs.tower worldGravity groundLevel enemyList mkProjectile spawnEnemy
       gs'       = step world gs
       ents      = Map.elems gs'.entities
       mTurret   = find (\e -> e.kind == Turret) ents
   drawing $ do
     clearBackground Colors.black
+    renderGround
     maybe (pure ()) (\t -> renderBarrel gs'.tower t.box.center) mTurret
     renderTower gs'
     mapM_ renderEntity ents
@@ -81,8 +86,13 @@ frame gs = do
     drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
     fps <- getFPS
     drawText ("FPS: " <> show fps) 20 76 20 Colors.lime
-    drawText "move mouse to aim - turret auto-fires at locked targets" 20 (screenHeight - 36) 18 Colors.darkGray
+    drawText "move mouse to aim - turret fires toward the scanbox" 20 (screenHeight - 36) 18 Colors.darkGray
   pure gs'
+
+-- | Draw the ground line across the screen.
+renderGround :: IO ()
+renderGround =
+  drawLineV (Vector2 0 groundLevel) (Vector2 (fromIntegral screenWidth) groundLevel) Colors.darkGray
 
 -- | Draw a single entity, coloured/annotated by its kind.
 renderEntity :: Entity -> IO ()

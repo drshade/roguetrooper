@@ -57,7 +57,8 @@ data Entity = Entity
 -- continuation); the rest affect the wider world. The engine folds a frame's
 -- whole event list into the 'GameState' sequentially.
 data Event
-  = SetVel EntityId Vector2       -- ^ set this entity's velocity (applied by integration)
+  = Steer EntityId Float Vector2  -- ^ ease this entity's velocity toward a target (responsiveness, target)
+  | Impulse EntityId Vector2      -- ^ add a Δv to this entity's velocity (knockback)
   | SetScript EntityId (Script ()) -- ^ store this entity's resumed continuation
   | Spawn ProjectileType Vector2  -- ^ spawn a projectile (engine assembles + assigns id)
   | Damage EntityId Int           -- ^ deal N damage to the identified entity

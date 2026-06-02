@@ -1,10 +1,10 @@
 -- | The script interpreter and per-frame simulation.
 --
 -- The engine is a generic substrate. Each entity's script run is a pure
--- function to a list of 'Event's — it never mutates the entity (not even its
--- own position). 'step' folds every entity's events into the world, then a
--- single integration pass moves everyone by their velocity. The engine has no
--- per-projectile collision or lifetime logic.
+-- function to a list of 'Event's. 'step' folds every entity's events into the
+-- world, then a single physics integration pass applies gravity and moves
+-- everyone by their (persistent) velocity. The engine has no per-projectile
+-- collision or lifetime logic.
 module RogueTrooper.Engine
   ( World (..)
   , runEntityFrame
@@ -19,7 +19,7 @@ import           Control.Monad.Free (Free (..))
 import qualified Data.Map.Strict    as Map
 import           Raylib.Types        (Vector2, pattern Vector2)
 import           Raylib.Util.Math    (vectorDistance, (|*), (|+|), (|-|))
-import           RogueTrooper.Aim    (nearestInBox, seekToward)
+import           RogueTrooper.Aim    (nearestInBox)
 import           RogueTrooper.Script (ScriptF (..))
 import           RogueTrooper.Types
 
@@ -28,54 +28,55 @@ towerHitRadius :: Float
 towerHitRadius = 28
 
 -- | Read-only per-frame context available to scripts via queries, plus the
--- content-provided factories (so the engine never imports behaviours).
+-- content-provided factories and physics constants (so the engine imports no
+-- content).
 data World = World
   { dt           :: Float                              -- ^ seconds elapsed this frame
   , aimTarget    :: Vector2                            -- ^ current aim position (mouse)
   , towerPos     :: Vector2                            -- ^ the defended tower's position
+  , gravity      :: Vector2                            -- ^ acceleration applied to airborne physical entities
+  , groundLevel  :: Float                              -- ^ y of the ground line
   , enemyList    :: [(EntityId, Vector2, Vector2)]     -- ^ enemies visible to scripts (id, pos, velocity)
   , mkProjectile :: ProjectileType -> Vector2 -> Entity -- ^ content factory: type + origin -> projectile
   , mkEnemy      :: Vector2 -> Entity                  -- ^ content factory: position -> enemy
   }
 
 -- | Run one entity's script for a single frame, producing the events it wants
--- applied. The entity is not modified here — @MoveToward@ becomes a 'SetVel'
--- (integration moves it later), 'Yield' stores the resumed continuation, and the
--- effect verbs become world events. 'getMyPos' therefore returns the frame-start
--- position throughout the run.
+-- applied. The entity is not modified here — movement becomes 'Steer'/'Impulse'
+-- velocity events (integration moves it), 'Yield' stores the resumed
+-- continuation, and the effect verbs become world events.
 runEntityFrame :: World -> Entity -> [Event]
 runEntityFrame world ent = go [] ent.script
   where
     go evs s = case s of
-      Pure ()                             -> reverse (SetScript ent.eid (pure ()) : evs)
-      Free (Yield next)                   -> reverse (SetScript ent.eid next : evs)
-      Free (GetDt k)                      -> go evs (k world.dt)
-      Free (GetAimPos k)                  -> go evs (k world.aimTarget)
-      Free (GetMyPos k)                   -> go evs (k ent.box.center)
-      Free (GetMyId k)                    -> go evs (k ent.eid)
-      Free (GetTowerPos k)                -> go evs (k world.towerPos)
-      Free (GetEnemies k)                 -> go evs (k [(i, p) | (i, p, _) <- world.enemyList])
-      Free (GetTargetInBox k)             -> go evs (k (targetInBox ent.box world.enemyList))
-      Free (MoveToward speed target next) -> go (SetVel ent.eid (velToward speed target) : evs) next
-      Free (Fire origin pt next)          -> go (Spawn pt origin : evs) next
-      Free (Hit tid amt next)             -> go (Damage tid amt : evs) next
-      Free (Expire tid next)              -> go (Despawn tid : evs) next
-
-    -- velocity that, integrated over this frame, lands at the (clamped) seek target
-    velToward speed target =
-      let pos  = ent.box.center
-          newP = seekToward speed world.dt pos target
-       in if world.dt <= 0 then Vector2 0 0 else (newP |-| pos) |* (1 / world.dt)
+      Pure ()                       -> reverse (SetScript ent.eid (pure ()) : evs)
+      Free (Yield next)             -> reverse (SetScript ent.eid next : evs)
+      Free (GetDt k)                -> go evs (k world.dt)
+      Free (GetAimPos k)            -> go evs (k world.aimTarget)
+      Free (GetMyPos k)             -> go evs (k ent.box.center)
+      Free (GetMyVel k)             -> go evs (k ent.vel)
+      Free (GetMyId k)              -> go evs (k ent.eid)
+      Free (GetTowerPos k)          -> go evs (k world.towerPos)
+      Free (GetEnemies k)           -> go evs (k [(i, p) | (i, p, _) <- world.enemyList])
+      Free (GetTargetInBox k)       -> go evs (k (targetInBox ent.box world.enemyList))
+      Free (DoSteer resp tgt next)  -> go (Steer ent.eid resp tgt : evs) next
+      Free (DoPush tid dv next)     -> go (Impulse tid dv : evs) next
+      Free (Fire origin pt next)    -> go (Spawn pt origin : evs) next
+      Free (Hit tid amt next)       -> go (Damage tid amt : evs) next
+      Free (Expire tid next)        -> go (Despawn tid : evs) next
 
     targetInBox b enemies = nearestInBox b [((p, v), p) | (_, p, v) <- enemies]
 
--- | Fold a frame's events into the world: set velocities/continuations, spawn
--- projectiles (assigning fresh ids), deal damage (killing + scoring enemies at
+-- | Fold a frame's events into the world: ease/impulse velocities, store
+-- continuations, spawn projectiles (fresh ids), damage (kill + score enemies at
 -- 0 HP), and despawn entities.
-applyEvents :: (ProjectileType -> Vector2 -> Entity) -> [Event] -> GameState -> GameState
-applyEvents mk evs gs0 = foldl' apply gs0 evs
+applyEvents :: Float -> (ProjectileType -> Vector2 -> Entity) -> [Event] -> GameState -> GameState
+applyEvents dt' mk evs gs0 = foldl' apply gs0 evs
   where
-    apply gs (SetVel i v)    = gs { entities = Map.adjust (\e -> e { vel = v }) i gs.entities }
+    apply gs (Steer i resp tgt) =
+      gs { entities = Map.adjust (\e -> e { vel = e.vel |+| ((tgt |-| e.vel) |* min 1 (resp * dt')) }) i gs.entities }
+    apply gs (Impulse i dv) =
+      gs { entities = Map.adjust (\e -> e { vel = e.vel |+| dv }) i gs.entities }
     apply gs (SetScript i k) = gs { entities = Map.adjust (\e -> e { script = k }) i gs.entities }
     apply gs (Despawn i)     = gs { entities = Map.delete i gs.entities }
     apply gs (Spawn pt origin) =
@@ -93,11 +94,23 @@ applyEvents mk evs gs0 = foldl' apply gs0 evs
                         }
                 else gs { entities = Map.insert i e' gs.entities }
 
--- | Move every entity by its current velocity (the only place positions change).
-integrate :: Float -> GameState -> GameState
-integrate dt' gs = gs { entities = Map.map move gs.entities }
+-- | Physics integration: apply gravity to airborne physical entities, move
+-- everyone by velocity, and rest landed enemies on the ground (clamp + stop
+-- vertical motion). The turret/scanbox is a non-physical reticle — no gravity,
+-- no ground clamp.
+integrate :: Vector2 -> Float -> Float -> GameState -> GameState
+integrate g ground dt' gs = gs { entities = Map.map move gs.entities }
   where
-    move e = e { box = e.box { center = e.box.center |+| (e.vel |* dt') } }
+    move e =
+      let Vector2 _ y       = e.box.center
+          airborne          = e.kind /= Turret && y < ground
+          v1                = if airborne then e.vel |+| (g |* dt') else e.vel
+          Vector2 cx cy     = e.box.center |+| (v1 |* dt')
+          (center', vel')
+            | e.kind == Enemy && cy >= ground =
+                let Vector2 vx _ = v1 in (Vector2 cx ground, Vector2 vx 0)  -- land + stop falling
+            | otherwise = (Vector2 cx cy, v1)
+       in e { box = e.box { center = center' }, vel = vel' }
 
 -- | Remove enemies that have reached the tower, dealing 1 HP of tower damage each.
 resolveTowerHits :: GameState -> GameState
@@ -130,11 +143,10 @@ spawnTick world gs
              }
 
 -- | Advance the whole simulation one frame: collect every entity's events, fold
--- them into the world (velocities reset first so a non-moving entity stops),
--- integrate positions, then resolve tower hits and spawning.
+-- them into the world (velocity persists between frames), integrate physics,
+-- then resolve tower hits and spawning.
 step :: World -> GameState -> GameState
 step world gs =
   let events = concatMap (runEntityFrame world) (Map.elems gs.entities)
-      zeroed = gs { entities = Map.map (\e -> e { vel = Vector2 0 0 }) gs.entities }
-      folded = applyEvents world.mkProjectile events zeroed
-   in spawnTick world (resolveTowerHits (integrate world.dt folded))
+      folded = applyEvents world.dt world.mkProjectile events gs
+   in spawnTick world (resolveTowerHits (integrate world.gravity world.groundLevel world.dt folded))

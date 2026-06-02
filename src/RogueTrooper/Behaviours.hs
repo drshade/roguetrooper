@@ -13,111 +13,143 @@ module RogueTrooper.Behaviours
   ) where
 
 import           Raylib.Types        (Vector2, pattern Vector2)
-import           Raylib.Util.Math    (vectorDistance, vectorNormalize, (|*),
-                                      (|+|), (|-|))
+import           Raylib.Util.Math    (magnitude, vectorDistance, vectorNormalize,
+                                      (|*), (|+|), (|-|))
 import           RogueTrooper.Script (ProjectileType (..), Script, damage,
                                       despawnSelf, fire, getAimPos, getDt,
-                                      getEnemies, getMyPos,
-                                      getTowerPos, moveToward, yield)
+                                      getEnemies, getMyPos, getMyVel, getTowerPos,
+                                      push, steer, yield)
 
--- | The y coordinate at which descending enemies are considered landed.
--- (raylib screen coords: y grows downward.)
+-- Constants ------------------------------------------------------------------
+
+-- | The y coordinate of the ground line (raylib screen coords: y grows down).
 groundLevel :: Float
 groundLevel = 640
-
--- | Is this position on the ground?
-onLand :: Vector2 -> Bool
-onLand (Vector2 _ y) = y >= groundLevel
 
 -- | Seconds between turret shots (fire rate).
 fireInterval :: Float
 fireInterval = 0.3
 
--- | How fast the turret box seeks toward the aim box.
-turretSeekSpeed :: Float
-turretSeekSpeed = 320
+-- | How fast / snappily the scanbox tracks the crosshair.
+scanSpeed, scanResponsiveness :: Float
+scanSpeed = 900
+scanResponsiveness = 24
 
--- | How fast enemies descend / advance.
-enemySpeed :: Float
+-- | Enemy walk speed and how quickly its legs recover their desired velocity
+-- (lower = knockback lingers longer).
+enemySpeed, enemyResponsiveness :: Float
 enemySpeed = 80
+enemyResponsiveness = 6
 
--- | The turret: the scanbox (its box) seeks toward the crosshair, and every
--- cooldown it fires from the tower toward the scanbox centre — i.e. wherever it
--- is currently pointing. No target lock yet (a future auto-aimer will pick a
--- target within the scanbox). Cooldown carried in its own continuation.
-turretBehaviour :: Script ()
-turretBehaviour = turret 0   -- cooldown carried in the continuation, starts ready
-  where
-    turret cooldown = do
-      aim <- getAimPos
-      moveToward turretSeekSpeed aim                       -- scanbox seeks the crosshair
-      cooldown' <-
-        if cooldown <= 0
-          then do
-            tower <- getTowerPos
-            scan  <- getMyPos                               -- scanbox centre = where we point
-            fire tower (StraightBullet (farPoint tower scan))
-            pure fireInterval
-          else pure cooldown
-      dt <- getDt
-      yield
-      turret (cooldown' - dt)                              -- tick the cooldown down
-
--- | A point far along the ray from @from@ through @to@, so a straight bullet
--- flies through its target rather than stopping on it.
-farPoint :: Vector2 -> Vector2 -> Vector2
-farPoint from to
-  | vectorDistance from to < 1 = from |+| Vector2 0 (-5000)   -- degenerate: aim up
-  | otherwise                  = from |+| (vectorNormalize (to |-| from) |* 5000)
-
--- | Radius within which a straight bullet counts as hitting an enemy.
-bulletHitRadius :: Float
-bulletHitRadius = 18
-
--- | Speed of fired bullets. Shared by the turret's lead calculation and the
--- projectile factory so they stay in sync.
+-- | Launch speed of fired bullets.
 bulletSpeed :: Float
-bulletSpeed = 450
+bulletSpeed = 700
 
 -- | Damage a straight bullet deals on hit.
 bulletDamage :: Int
 bulletDamage = 3
 
+-- | Radius within which a straight bullet counts as hitting an enemy.
+bulletHitRadius :: Float
+bulletHitRadius = 18
+
+-- | Impulse magnitude a bullet imparts to an enemy on hit.
+knockbackStrength :: Float
+knockbackStrength = 260
+
+-- Helpers --------------------------------------------------------------------
+
+onLand :: Vector2 -> Bool
+onLand (Vector2 _ y) = y >= groundLevel
+
+offScreen :: Vector2 -> Bool
+offScreen (Vector2 x y) = x < -50 || x > 1330 || y < -50 || y > 770
+
+-- | Cap a vector's magnitude.
+clampMag :: Float -> Vector2 -> Vector2
+clampMag maxLen v
+  | magnitude v > maxLen = vectorNormalize v |* maxLen
+  | otherwise            = v
+
+-- | Steer toward a target point: ease velocity toward a desired velocity that
+-- points at the target, capped at @speed@ (so it arrives and slows).
+steerToward :: Float -> Float -> Vector2 -> Script ()
+steerToward responsiveness speed target = do
+  me <- getMyPos
+  steer responsiveness (clampMag speed (target |-| me))
+
+-- Behaviours -----------------------------------------------------------------
+
+-- | The turret: the scanbox (its box) tracks the crosshair, and every cooldown
+-- it fires a ballistic bullet from the tower toward the scanbox centre. The
+-- scanbox is a non-physical reticle (no gravity). Cooldown lives in its own
+-- continuation.
+turretBehaviour :: Script ()
+turretBehaviour = turret 0
+  where
+    turret cooldown = do
+      aim <- getAimPos
+      steerToward scanResponsiveness scanSpeed aim          -- scanbox tracks the crosshair
+      cooldown' <-
+        if cooldown <= 0
+          then do
+            tower <- getTowerPos
+            scan  <- getMyPos                                -- scanbox centre = where we point
+            fire tower (StraightBullet (launchVel tower scan))
+            pure fireInterval
+          else pure cooldown
+      dt <- getDt
+      yield
+      turret (cooldown' - dt)
+
+-- | Initial bullet velocity: from the tower toward the scanbox, at bulletSpeed.
+launchVel :: Vector2 -> Vector2 -> Vector2
+launchVel tower scan
+  | vectorDistance tower scan < 1 = Vector2 0 (-bulletSpeed)   -- degenerate: straight up
+  | otherwise                     = vectorNormalize (scan |-| tower) |* bulletSpeed
+
+-- | A simple paratrooper: fall under gravity until landed, then walk toward the
+-- tower along the ground (its legs). Airborne, it does nothing — gravity falls it.
+enemyBehaviour :: Script ()
+enemyBehaviour = forever $ do
+  myPos <- getMyPos
+  when (onLand myPos) $ do
+    tower <- getTowerPos
+    let Vector2 tx _ = tower
+    steerToward enemyResponsiveness enemySpeed (Vector2 tx groundLevel)
+  yield
+
+-- | A ballistic bullet (launched with a velocity, then curved by gravity). Each
+-- frame it checks for an overlapping enemy — emitting damage + knockback +
+-- despawn — and despawns on hitting the ground or leaving the screen.
+straightBullet :: Script ()
+straightBullet = fly
+  where
+    fly = do
+      me <- getMyPos
+      es <- getEnemies
+      case [tid | (tid, p) <- es, vectorDistance me p <= bulletHitRadius] of
+        tid : _ -> do
+          damage tid bulletDamage
+          v <- getMyVel
+          push tid (knockback v)
+          despawnSelf
+        []
+          | onLand me || offScreen me -> despawnSelf
+          | otherwise                 -> yield >> fly
+
+-- | Knockback impulse in the bullet's direction of travel.
+knockback :: Vector2 -> Vector2
+knockback v
+  | magnitude v < 1 = Vector2 0 0
+  | otherwise       = vectorNormalize v |* knockbackStrength
+
 -- | Predict where to aim to hit a moving target: the intercept point given the
--- bullet's travel time. Two fixed-point iterations refine the estimate.
+-- bullet's travel time. Kept for the future auto-aimer. Two fixed-point
+-- iterations refine the estimate.
 predictLead :: Vector2 -> Vector2 -> Vector2 -> Float -> Vector2
 predictLead origin pos vel speed = pos |+| (vel |* travelTime)
   where
     t1         = vectorDistance origin pos / speed
     p1         = pos |+| (vel |* t1)
     travelTime = vectorDistance origin p1 / speed
-
--- | Is a position outside the (margin-padded) screen?
-offScreen :: Vector2 -> Bool
-offScreen (Vector2 x y) = x < -50 || x > 1330 || y < -50 || y > 770
-
--- | An enemy (paratrooper): descend until on the ground, then advance on the
--- tower. Reactive — each frame it decides based on its current position.
-enemyBehaviour :: Script ()
-enemyBehaviour = forever $ do
-  myPos <- getMyPos
-  let Vector2 mx _ = myPos
-  if onLand myPos
-    then getTowerPos >>= moveToward enemySpeed       -- landed: advance on the tower
-    else moveToward enemySpeed (Vector2 mx groundLevel)  -- airborne: descend straight down
-  yield
-
--- | A dumb projectile that flies toward a fixed aim point, hits the first enemy
--- within its radius (emitting damage + removing itself), and despawns when it
--- leaves the screen.
-straightBullet :: Vector2 -> Script ()
-straightBullet aim = fly
-  where
-    fly = do
-      me <- getMyPos                       -- where I am at the start of this frame
-      es <- getEnemies
-      case [tid | (tid, p) <- es, vectorDistance me p <= bulletHitRadius] of
-        tid : _ -> damage tid bulletDamage >> despawnSelf   -- overlapping now: hit + remove
-        []
-          | offScreen me -> despawnSelf
-          | otherwise    -> moveToward bulletSpeed aim >> yield >> fly
