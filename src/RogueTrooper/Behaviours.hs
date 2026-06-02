@@ -18,7 +18,7 @@ import           Raylib.Util.Math    (magnitude, vectorDistance, vectorNormalize
 import           RogueTrooper.Script (ProjectileType (..), Script, damage,
                                       despawnSelf, fire, getAimPos, getDt,
                                       getEnemies, getMyPos, getMyVel, getTowerPos,
-                                      push, steer, yield)
+                                      push, setVel, steer, yield)
 
 -- Constants ------------------------------------------------------------------
 
@@ -30,10 +30,9 @@ groundLevel = 640
 fireInterval :: Float
 fireInterval = 0.3
 
--- | How fast / snappily the scanbox tracks the crosshair.
-scanSpeed, scanResponsiveness :: Float
+-- | How fast the scanbox reticle tracks the crosshair (constant speed).
+scanSpeed :: Float
 scanSpeed = 900
-scanResponsiveness = 24
 
 -- | Enemy walk speed and how quickly its legs recover their desired velocity
 -- (lower = knockback lingers longer).
@@ -79,11 +78,22 @@ clampMag maxLen v
   | otherwise            = v
 
 -- | Steer toward a target point: ease velocity toward a desired velocity that
--- points at the target, capped at @speed@ (so it arrives and slows).
+-- points at the target, capped at @speed@ (so it arrives and slows). For
+-- physical entities (enemy legs).
 steerToward :: Float -> Float -> Vector2 -> Script ()
 steerToward responsiveness speed target = do
   me <- getMyPos
   steer responsiveness (clampMag speed (target |-| me))
+
+-- | Kinematic seek: move toward a point at a constant speed, hard-setting
+-- velocity (no easing, no forces), clamped so it lands exactly without
+-- overshooting. For the scanbox reticle.
+seekAt :: Float -> Vector2 -> Script ()
+seekAt speed target = do
+  me <- getMyPos
+  dt <- getDt
+  let step = clampMag (speed * dt) (target |-| me)
+  setVel (if dt <= 0 then Vector2 0 0 else step |* (1 / dt))
 
 -- Behaviours -----------------------------------------------------------------
 
@@ -96,7 +106,7 @@ turretBehaviour = turret 0
   where
     turret cooldown = do
       aim <- getAimPos
-      steerToward scanResponsiveness scanSpeed aim          -- scanbox tracks the crosshair
+      seekAt scanSpeed aim                                  -- reticle: constant-speed kinematic tracking
       cooldown' <-
         if cooldown <= 0
           then do

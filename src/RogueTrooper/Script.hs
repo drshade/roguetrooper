@@ -21,6 +21,7 @@ module RogueTrooper.Script
   , getEnemies
   , getTargetInBox
   , steer
+  , setVel
   , push
   , fire
   , damage
@@ -53,6 +54,7 @@ data ScriptF next
   | GetEnemies ([(EntityId, Vector2)] -> next) -- ^ query: all enemies (id + position)
   | GetTargetInBox (Maybe (Vector2, Vector2) -> next) -- ^ query: nearest enemy in MY box (pos, velocity)
   | DoSteer Float Vector2 next                -- ^ command: ease my velocity toward a target (responsiveness, target velocity)
+  | DoSetVel Vector2 next                     -- ^ command: hard-set my velocity (kinematic — no forces/easing)
   | DoPush EntityId Vector2 next              -- ^ effect: apply an impulse (Δv) to an entity
   | Fire Vector2 ProjectileType next          -- ^ effect: spawn a projectile from a given origin
   | Hit EntityId Int next                      -- ^ effect: deal N damage to the named enemy
@@ -100,6 +102,11 @@ getTargetInBox = liftF (GetTargetInBox id)
 -- responsiveness (1/sec). A soft pull — impulses (knockback) linger and recover.
 steer :: Float -> Vector2 -> Script ()
 steer responsiveness target = liftF (DoSteer responsiveness target ())
+
+-- | Hard-set this entity's velocity for this frame (kinematic — bypasses forces
+-- and easing). For non-physical entities like the scanbox reticle.
+setVel :: Vector2 -> Script ()
+setVel v = liftF (DoSetVel v ())
 
 -- | Apply an impulse (instant change in velocity) to an entity. Used for knockback.
 push :: EntityId -> Vector2 -> Script ()

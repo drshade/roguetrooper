@@ -60,6 +60,7 @@ runEntityFrame world ent = go [] ent.script
       Free (GetEnemies k)           -> go evs (k [(i, p) | (i, p, _) <- world.enemyList])
       Free (GetTargetInBox k)       -> go evs (k (targetInBox ent.box world.enemyList))
       Free (DoSteer resp tgt next)  -> go (Steer ent.eid resp tgt : evs) next
+      Free (DoSetVel v next)        -> go (SetVel ent.eid v : evs) next
       Free (DoPush tid dv next)     -> go (Impulse tid dv : evs) next
       Free (Fire origin pt next)    -> go (Spawn pt origin : evs) next
       Free (Hit tid amt next)       -> go (Damage tid amt : evs) next
@@ -75,6 +76,8 @@ applyEvents dt' mk evs gs0 = foldl' apply gs0 evs
   where
     apply gs (Steer i resp tgt) =
       gs { entities = Map.adjust (\e -> e { vel = e.vel |+| ((tgt |-| e.vel) |* min 1 (resp * dt')) }) i gs.entities }
+    apply gs (SetVel i v) =
+      gs { entities = Map.adjust (\e -> e { vel = v }) i gs.entities }
     apply gs (Impulse i dv) =
       gs { entities = Map.adjust (\e -> e { vel = e.vel |+| dv }) i gs.entities }
     apply gs (SetScript i k) = gs { entities = Map.adjust (\e -> e { script = k }) i gs.entities }

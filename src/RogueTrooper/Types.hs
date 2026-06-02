@@ -58,6 +58,7 @@ data Entity = Entity
 -- whole event list into the 'GameState' sequentially.
 data Event
   = Steer EntityId Float Vector2  -- ^ ease this entity's velocity toward a target (responsiveness, target)
+  | SetVel EntityId Vector2       -- ^ hard-set this entity's velocity (kinematic)
   | Impulse EntityId Vector2      -- ^ add a Δv to this entity's velocity (knockback)
   | SetScript EntityId (Script ()) -- ^ store this entity's resumed continuation
   | Spawn ProjectileType Vector2  -- ^ spawn a projectile (engine assembles + assigns id)
