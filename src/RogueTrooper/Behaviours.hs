@@ -112,9 +112,10 @@ straightBullet :: Vector2 -> Script ()
 straightBullet aim = fly
   where
     fly = do
-      moveToward bulletSpeed aim
-      me <- getMyPos
+      me <- getMyPos                       -- where I am at the start of this frame
       es <- getEnemies
       case [tid | (tid, p) <- es, vectorDistance me p <= bulletHitRadius] of
-        tid : _ -> damage tid bulletDamage >> despawnSelf   -- hit: damage it and remove myself
-        []      -> if offScreen me then despawnSelf else yield >> fly
+        tid : _ -> damage tid bulletDamage >> despawnSelf   -- overlapping now: hit + remove
+        []
+          | offScreen me -> despawnSelf
+          | otherwise    -> moveToward bulletSpeed aim >> yield >> fly

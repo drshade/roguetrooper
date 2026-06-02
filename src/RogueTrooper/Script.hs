@@ -32,7 +32,7 @@ import Raylib.Types       (Vector2)
 
 -- | A stable identity for an entity, so scripts can refer to specific targets.
 newtype EntityId = EntityId Int
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- | The kinds of projectile the turret can fire. Each variant carries the data
 -- its behaviour needs, and drives which script it runs and how it is rendered.

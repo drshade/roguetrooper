@@ -33,6 +33,7 @@ library
     RogueTrooper.Types
 
   build-depends:
+    containers,
     free,
     h-raylib,
     rerebase,
@@ -80,6 +81,7 @@ test-suite roguetrooper-test
     -with-rtsopts=-N
 
   build-depends:
+    containers,
     free,
     h-raylib,
     hspec,

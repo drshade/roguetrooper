@@ -3,15 +3,16 @@ module RogueTrooper.Types
   ( BoxShape (..)
   , Box (..)
   , EntityId (..)
+  , EntityKind (..)
   , Entity (..)
   , ProjectileType (..)
-  , Bullet (..)
-  , Effect (..)
+  , Event (..)
   , GameState (..)
   ) where
 
-import Raylib.Types        (Vector2)
-import RogueTrooper.Script (EntityId (..), ProjectileType (..), Script)
+import qualified Data.Map.Strict   as Map
+import           Raylib.Types        (Vector2)
+import           RogueTrooper.Script (EntityId (..), ProjectileType (..), Script)
 
 -- | The shape of a targeting region, centred on its position.
 data BoxShape
@@ -27,46 +28,52 @@ data Box = Box
   }
   deriving (Eq, Show)
 
--- | A scripted actor in the world: the turret, every enemy, every bullet.
--- @script@ is the entity's resumable behaviour continuation; the interpreter
--- runs it each frame and stores the resumed continuation back.
+-- | What an entity is — drives rendering and which queries see it. Projectiles
+-- carry their 'ProjectileType' (the old @Bullet@ wrapper is gone; a bullet is
+-- just an entity).
+data EntityKind
+  = Turret
+  | Enemy
+  | Projectile ProjectileType
+  deriving (Eq, Show)
+
+-- | A scripted actor in the world. Every entity — the turret, enemies, and
+-- projectiles — is one of these, held in 'GameState.entities' keyed by id.
+--
+-- Scripts never mutate an entity directly: a frame's run produces 'Event's, and
+-- the engine folds those back (including this entity's velocity and resumed
+-- continuation). Positions change only in the integration pass.
 data Entity = Entity
   { eid    :: EntityId   -- ^ stable identity
+  , kind   :: EntityKind -- ^ what it is (drives rendering / queries)
   , box    :: Box        -- ^ @center@ = current position; @shape@ = its region
-  , vel    :: Vector2    -- ^ last frame's velocity (units/sec), set by the engine on move
+  , vel    :: Vector2    -- ^ velocity (units/sec) for this frame's integration
   , hp     :: Int        -- ^ hit points; removed (and scored) when reduced to 0
   , script :: Script ()  -- ^ resumable behaviour continuation
   }
 
--- | A projectile in flight: its 'ProjectileType' (for rendering) plus the
--- 'Entity' that carries its position and behaviour.
-data Bullet = Bullet
-  { ptype  :: ProjectileType
-  , entity :: Entity
-  }
-
--- | A world effect emitted by a script and applied by the engine. The engine is
--- a generic fold over these; it has no per-projectile collision logic.
-data Effect
-  = Spawn ProjectileType Vector2  -- ^ spawn a projectile (origin injected by the interpreter)
-  | Damage EntityId Int           -- ^ deal N damage to the identified enemy
+-- | A change a script asks the engine to make this frame. @SetVel@ and
+-- @SetScript@ are self-targeted (the entity's own velocity and resumed
+-- continuation); the rest affect the wider world. The engine folds a frame's
+-- whole event list into the 'GameState' sequentially.
+data Event
+  = SetVel EntityId Vector2       -- ^ set this entity's velocity (applied by integration)
+  | SetScript EntityId (Script ()) -- ^ store this entity's resumed continuation
+  | Spawn ProjectileType Vector2  -- ^ spawn a projectile (engine assembles + assigns id)
+  | Damage EntityId Int           -- ^ deal N damage to the identified entity
   | Despawn EntityId              -- ^ remove the identified entity
-  deriving (Eq, Show)
 
--- | The whole game simulation state. Grows as mechanics are added.
+-- | The whole game simulation state. Every actor lives in 'entities'; the tower
+-- (the defended point) is not a scripted entity, so it stays separate.
 --
--- No 'Eq'/'Show': entities hold resumable continuations (functions), so the
--- state is neither comparable nor showable as data. Tests assert on individual
--- fields instead.
+-- No 'Eq'/'Show': entities hold resumable continuations (functions).
 data GameState = GameState
-  { turret        :: Entity    -- ^ the player's turret
-  , enemies       :: [Entity]  -- ^ active enemies
-  , bullets       :: [Bullet]  -- ^ projectiles in flight
-  , tower         :: Vector2   -- ^ the defended position
+  { entities      :: Map.Map EntityId Entity  -- ^ all actors, keyed by id
+  , tower         :: Vector2                  -- ^ the defended position
   , towerHp       :: Int
-  , score         :: Int       -- ^ enemy kill count
-  , nextId        :: Int       -- ^ counter for assigning fresh 'EntityId's
-  , spawnTimer    :: Float     -- ^ seconds until the next enemy spawn
-  , spawnInterval :: Float     -- ^ seconds between enemy spawns
-  , seed          :: Int       -- ^ RNG state for deterministic spawn positions
+  , score         :: Int                      -- ^ enemy kill count
+  , nextId        :: Int                      -- ^ counter for assigning fresh ids
+  , spawnTimer    :: Float                    -- ^ seconds until the next enemy spawn
+  , spawnInterval :: Float                    -- ^ seconds between enemy spawns
+  , seed          :: Int                      -- ^ RNG state for deterministic spawns
   }

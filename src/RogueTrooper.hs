@@ -6,6 +6,7 @@ module RogueTrooper
   ( runGame
   ) where
 
+import qualified Data.Map.Strict         as Map
 import           Raylib.Core             (clearBackground, getFPS, getFrameTime,
                                           getMousePosition)
 import           Raylib.Core.Shapes      (drawCircleLinesV, drawEllipseLines,
@@ -21,8 +22,8 @@ import           RogueTrooper.Aim        (nearestInBox)
 import           RogueTrooper.Behaviours (enemyBehaviour, straightBullet,
                                           turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
-import           RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..),
-                                          Entity (..), EntityId (..),
+import           RogueTrooper.Types       (Box (..), BoxShape (..), Entity (..),
+                                          EntityId (..), EntityKind (..),
                                           GameState (..), ProjectileType (..))
 
 screenWidth, screenHeight, targetFps :: Int
@@ -33,36 +34,29 @@ targetFps = 600
 initialState :: GameState
 initialState =
   GameState
-    { turret  =
-        Entity
-          { eid    = EntityId 0
-          , box    = Box (Vector2 640 360) (Circle 60)
-          , vel    = Vector2 0 0
-          , hp     = 1
-          , script = turretBehaviour
-          }
-    , enemies = []   -- populated by the spawner
-    , bullets = []
-    , tower   = Vector2 640 660
-    , towerHp = 10
-    , score   = 0
-    , nextId  = 1
+    { entities      = Map.fromList [(EntityId 0, turret)]
+    , tower         = Vector2 640 660
+    , towerHp       = 10
+    , score         = 0
+    , nextId        = 1
     , spawnTimer    = 0.5
-    , spawnInterval = 0.00001
+    , spawnInterval = 0.1
     , seed          = 12345
     }
+  where
+    turret = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
 
 -- | Content-side projectile factory handed to the engine: map a 'ProjectileType'
--- to an assembled bullet (its behaviour script + speed). The engine assigns the
--- real id. This is the single registry of projectile types.
-mkBullet :: ProjectileType -> Vector2 -> Bullet
-mkBullet pt@(StraightBullet target) origin =
-  Bullet pt (Entity (EntityId 0) (Box origin (Circle 4)) (Vector2 0 0) 1 (straightBullet target))
+-- to an assembled entity (its kind, behaviour script, shape). The engine assigns
+-- the real id. This is the single registry of projectile types.
+mkProjectile :: ProjectileType -> Vector2 -> Entity
+mkProjectile pt@(StraightBullet target) origin =
+  Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) (Vector2 0 0) 1 (straightBullet target)
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
 -- have 3 hit points.
 spawnEnemy :: Vector2 -> Entity
-spawnEnemy pos = Entity (EntityId 0) (Box pos (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
+spawnEnemy pos = Entity (EntityId 0) Enemy (Box pos (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
 
 runGame :: IO ()
 runGame =
@@ -74,24 +68,31 @@ frame :: GameState -> IO GameState
 frame gs = do
   dt    <- getFrameTime
   mouse <- getMousePosition
-  let enemyList = map (\e -> (e.eid, e.box.center, e.vel)) gs.enemies
-      world     = World dt mouse gs.tower enemyList mkBullet spawnEnemy
+  let enemyList = [(e.eid, e.box.center, e.vel) | e <- Map.elems gs.entities, e.kind == Enemy]
+      world     = World dt mouse gs.tower enemyList mkProjectile spawnEnemy
       gs'       = step world gs
+      ents      = Map.elems gs'.entities
+      enemies   = [e | e <- ents, e.kind == Enemy]
+      mTurret   = find (\e -> e.kind == Turret) ents
   drawing $ do
     clearBackground Colors.black
-    renderBarrel gs'.tower gs'.turret.box.center
+    maybe (pure ()) (\t -> renderBarrel gs'.tower t.box.center) mTurret
     renderTower gs'
-    mapM_ (renderBox Colors.red . (.box)) gs'.enemies
-    mapM_ renderEnemyHp gs'.enemies
-    mapM_ (renderBox Colors.gold . (.box) . (.entity)) gs'.bullets
-    renderBox Colors.lime gs'.turret.box
-    renderLockOn gs'
+    mapM_ renderEntity ents
+    maybe (pure ()) (\t -> renderLockOn t.box enemies) mTurret
     renderAimBox mouse
     drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
     fps <- getFPS
     drawText ("FPS: " <> show fps) 20 76 20 Colors.lime
     drawText "move mouse to aim - turret auto-fires at locked targets" 20 (screenHeight - 36) 18 Colors.darkGray
   pure gs'
+
+-- | Draw a single entity, coloured/annotated by its kind.
+renderEntity :: Entity -> IO ()
+renderEntity e = case e.kind of
+  Turret       -> renderBox Colors.lime e.box
+  Enemy        -> renderBox Colors.red e.box >> renderEnemyHp e
+  Projectile _ -> renderBox Colors.gold e.box
 
 -- | Draw the targeting-region outline for a box, by shape.
 renderBox :: Color -> Box -> IO ()
@@ -120,13 +121,13 @@ renderAimBox m = do
   drawLineV (Vector2 mx (my - k)) (Vector2 mx (my + k)) Colors.rayWhite
 
 -- | Draw a lock-on marker on the enemy the turret is currently targeting.
-renderLockOn :: GameState -> IO ()
-renderLockOn gs =
-  case nearestInBox gs.turret.box [(e.box.center, e.box.center) | e <- gs.enemies] of
+renderLockOn :: Box -> [Entity] -> IO ()
+renderLockOn turretBox enemies =
+  case nearestInBox turretBox [(e.box.center, e.box.center) | e <- enemies] of
     Just p  -> drawCircleLinesV p 20 Colors.yellow
     Nothing -> pure ()
 
--- | Draw the turret barrel: a thick stub from the tower pointing at the crosshair.
+-- | Draw the turret barrel: a thick stub from the tower pointing at the turret box.
 renderBarrel :: Vector2 -> Vector2 -> IO ()
 renderBarrel tower aim =
   let end = tower |+| (vectorNormalize (aim |-| tower) |* 48)
