@@ -6,7 +6,7 @@ module RogueTrooper
   ( runGame
   ) where
 
-import           Raylib.Core             (clearBackground, getFrameTime,
+import           Raylib.Core             (clearBackground, getFPS, getFrameTime,
                                           getMousePosition)
 import           Raylib.Core.Shapes      (drawCircleLinesV, drawEllipseLines,
                                           drawLineEx, drawLineV,
@@ -28,7 +28,7 @@ import           RogueTrooper.Types      (Box (..), BoxShape (..), Bullet (..),
 screenWidth, screenHeight, targetFps :: Int
 screenWidth = 1280
 screenHeight = 720
-targetFps = 60
+targetFps = 600
 
 initialState :: GameState
 initialState =
@@ -48,7 +48,7 @@ initialState =
     , score   = 0
     , nextId  = 1
     , spawnTimer    = 0.5
-    , spawnInterval = 0.75
+    , spawnInterval = 0.00001
     , seed          = 12345
     }
 
@@ -88,6 +88,8 @@ frame gs = do
     renderLockOn gs'
     renderAimBox mouse
     drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
+    fps <- getFPS
+    drawText ("FPS: " <> show fps) 20 76 20 Colors.lime
     drawText "move mouse to aim - turret auto-fires at locked targets" 20 (screenHeight - 36) 18 Colors.darkGray
   pure gs'
 
