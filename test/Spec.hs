@@ -236,6 +236,12 @@ main = hspec $ do
           gs  = mkGameState [mkEnemyAt (EntityId 1) enemyP, missile (EntityId 2) (Vector2 300 400) (EntityId 1) (Vector2 0 0)] towerP 10
           gs' = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
       velOf (EntityId 2) gs' `shouldSatisfy` maybe False (\(Vector2 vx _) -> vx > 0)
+    it "flies straight (no gravity drop) when its target is gone" $ do
+      -- target id 99 isn't in the world, so the missile coasts; velocity is preserved
+      let m   = missile (EntityId 2) (Vector2 300 300) (EntityId 99) (Vector2 200 (-100))
+          gs' = step (worldWith []) (mkGameState [m] towerP 10)
+      velOf (EntityId 2) gs'
+        `shouldSatisfy` maybe False (\(Vector2 vx vy) -> abs (vx - 200) < 1 && abs (vy + 100) < 1)
 
   describe "wait + spawnEnemyAt (sequential mission scripting)" $ do
     let world = testWorld 0.1 (Vector2 0 0) (Vector2 640 620)

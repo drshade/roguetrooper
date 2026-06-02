@@ -11,8 +11,8 @@ import           Raylib.Util.Math           (magnitude, vectorDistance, vectorNo
 import           RogueTrooper.Behaviours.Common (offScreen, onLand, seekAt)
 import           RogueTrooper.Script        (EntityId, ProjectileType (..), Script, damage,
                                              despawnSelf, fire, getAimPos, getDt, getEnemies,
-                                             getEntityPos, getMyPos, getMyVel, getTargetInBox,
-                                             getTowerPos, push, steer, yield)
+                                             getEntityPos, getGravity, getMyId, getMyPos, getMyVel,
+                                             getTargetInBox, getTowerPos, push, steer, yield)
 
 -- Turret ---------------------------------------------------------------------
 
@@ -122,9 +122,17 @@ homingMissile target = fly
           despawnSelf
         [] -> do
           mtp <- getEntityPos target
-          -- propulsion: accelerate toward a constant cruise speed in the target's
-          -- direction (no distance-based slowdown), overcoming gravity
-          maybe (pure ()) (\tp -> steer missileResponsiveness (thrustToward me tp)) mtp
+          case mtp of
+            -- propulsion: accelerate toward a constant cruise speed in the
+            -- target's direction (no distance-based slowdown), overcoming gravity
+            Just tp -> steer missileResponsiveness (thrustToward me tp)
+            -- target gone: cancel gravity so the (persistent) velocity keeps it
+            -- flying straight on
+            Nothing -> do
+              g    <- getGravity
+              dt   <- getDt
+              myId <- getMyId
+              push myId (g |* negate dt)
           if onLand me || offScreen me then despawnSelf else yield >> fly
 
     thrustToward me tp =
