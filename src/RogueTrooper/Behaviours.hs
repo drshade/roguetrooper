@@ -41,13 +41,19 @@ enemySpeed, enemyResponsiveness :: Float
 enemySpeed = 80
 enemyResponsiveness = 6
 
+-- | Parachute: the descent velocity an airborne enemy steers toward, and how
+-- strongly. Terminal fall speed ≈ parachuteSpeed + gravity / parachuteResponsiveness.
+parachuteSpeed, parachuteResponsiveness :: Float
+parachuteSpeed = 100
+parachuteResponsiveness = 12
+
 -- | Launch speed of fired bullets.
 bulletSpeed :: Float
-bulletSpeed = 700
+bulletSpeed = 1400
 
 -- | Damage a straight bullet deals on hit.
 bulletDamage :: Int
-bulletDamage = 3
+bulletDamage = 2
 
 -- | Radius within which a straight bullet counts as hitting an enemy.
 bulletHitRadius :: Float
@@ -108,15 +114,18 @@ launchVel tower scan
   | vectorDistance tower scan < 1 = Vector2 0 (-bulletSpeed)   -- degenerate: straight up
   | otherwise                     = vectorNormalize (scan |-| tower) |* bulletSpeed
 
--- | A simple paratrooper: fall under gravity until landed, then walk toward the
--- tower along the ground (its legs). Airborne, it does nothing — gravity falls it.
+-- | A paratrooper: while airborne the parachute steers it toward a capped
+-- descent velocity (gravity pulls, the chute limits the fall); once landed it
+-- walks toward the tower along the ground (its legs).
 enemyBehaviour :: Script ()
 enemyBehaviour = forever $ do
   myPos <- getMyPos
-  when (onLand myPos) $ do
-    tower <- getTowerPos
-    let Vector2 tx _ = tower
-    steerToward enemyResponsiveness enemySpeed (Vector2 tx groundLevel)
+  if onLand myPos
+    then do
+      tower <- getTowerPos
+      let Vector2 tx _ = tower
+      steerToward enemyResponsiveness enemySpeed (Vector2 tx groundLevel)  -- legs: walk to the tower
+    else steer parachuteResponsiveness (Vector2 0 parachuteSpeed)          -- parachute: capped descent
   yield
 
 -- | A ballistic bullet (launched with a velocity, then curved by gravity). Each

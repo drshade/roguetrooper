@@ -177,11 +177,11 @@ main = hspec $ do
     let enemyP       = Vector2 500 500
         towerP       = Vector2 640 620
         worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
-    it "damages an overlapping enemy, scores, and despawns itself" $ do
+    it "damages an overlapping enemy (non-lethal single hit) and despawns itself" $ do
       let gs  = mkGameState [mkEnemyAt (EntityId 1) enemyP, bulletAt (EntityId 2) enemyP (Vector2 100 0)] towerP 10
           gs' = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
-      length (enemiesOf gs') `shouldBe` 0
-      gs'.score `shouldBe` 1
+      ((.hp) <$> Map.lookup (EntityId 1) gs'.entities) `shouldBe` Just 1   -- 2 dmg vs 3 HP
+      gs'.score `shouldBe` 0
       Map.member (EntityId 2) gs'.entities `shouldBe` False
     it "despawns when it hits the ground" $ do
       let gs  = mkGameState [bulletAt (EntityId 2) (Vector2 100 650) (Vector2 0 0)] towerP 10
