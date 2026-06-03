@@ -15,7 +15,7 @@ import           RogueTrooper.Script            (ProjectileType (..), Script, fi
 
 -- | Cooldowns are longer than the main turret's (companions start weaker).
 missileCooldown, shotgunCooldown :: Float
-missileCooldown = 1.4
+missileCooldown = 3.0
 shotgunCooldown = 1.6
 
 -- | Shotgun: a burst of low-velocity pellets (so they don't travel far) spread
@@ -24,7 +24,7 @@ shotgunPellets :: Int
 shotgunPellets = 5
 
 shotgunSpeed, shotgunSpread :: Float
-shotgunSpeed  = 380          -- low velocity → short range
+shotgunSpeed  = 900          -- punchy initial velocity, still gravity-dropped → short range
 shotgunSpread = 0.35         -- radians (~20°)
 
 -- | Homing-missile companion: every cooldown it picks a RANDOM live enemy and
