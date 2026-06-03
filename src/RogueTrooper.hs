@@ -24,6 +24,7 @@ import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMis
                                           shotgunCompanion, straightBullet,
                                           turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
+import           RogueTrooper.Script     (Script)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..),
                                           EntityId (..), EntityKind (..),
                                           GameState (..), ProjectileType (..))
@@ -37,27 +38,37 @@ targetFps = 600
 worldGravity :: Vector2
 worldGravity = Vector2 0 900
 
+-- | The starting companion loadout — one entry per autonomous turret (up to 4).
+-- Add or remove behaviours here; ids, positions and 'nextId' are all derived in
+-- 'initialState'. Each script takes a seed so duplicate weapon types behave
+-- independently. (The reward-based slot system is still deferred; this is the
+-- fixed starting set.)
+companionLoadout :: [Script ()]
+companionLoadout =
+  [ missileCompanion 7777
+  , shotgunCompanion 3131
+  ]
+
 initialState :: GameState
 initialState =
   GameState
-    { entities = Map.fromList
-        [ (EntityId 0, turret)
-        , (EntityId 1, director)
-        , (EntityId 2, companionL)
-        , (EntityId 3, companionR)
-        ]
-    , tower    = Vector2 640 620   -- just above the ground line
+    { entities = Map.fromList ((EntityId 0, turret) : (EntityId 1, director) : companionEntries)
+    , tower    = towerPos
     , towerHp  = 10
     , score    = 0
-    , nextId   = 4
+    , nextId   = 2 + length companionLoadout
     }
   where
-    turret     = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
-    director   = Entity (EntityId 1) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 missionDirector
-    -- two autonomous companion turrets flanking the tower (hardcoded for now;
-    -- the upgrade/slot-picking system is deferred)
-    companionL = Entity (EntityId 2) Companion (Box (Vector2 500 624) (Circle 10)) (Vector2 0 0) 1 missileCompanion
-    companionR = Entity (EntityId 3) Companion (Box (Vector2 780 624) (Circle 10)) (Vector2 0 0) 1 shotgunCompanion
+    towerPos     = Vector2 640 620   -- just above the ground line
+    Vector2 tx _ = towerPos
+    turret       = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
+    director     = Entity (EntityId 1) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 missionDirector
+    -- evenly flank the tower: -150, +150, -300, +300, …
+    offsets      = take (length companionLoadout) (concat [[negate g, g] | i <- [1 :: Int ..], let g = fromIntegral i * 150])
+    companionEntries =
+      [ (EntityId i, Entity (EntityId i) Companion (Box (Vector2 (tx + dx) 624) (Circle 10)) (Vector2 0 0) 1 scr)
+      | (i, scr, dx) <- zip3 [2 ..] companionLoadout offsets
+      ]
 
 -- | Content-side projectile factory handed to the engine: map a 'ProjectileType'
 -- to an assembled entity (its kind, behaviour script, shape). The engine assigns

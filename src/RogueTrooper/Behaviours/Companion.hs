@@ -38,9 +38,10 @@ shotgunSpreadPerp  = 260
 shotgunSpreadAlong = 520
 
 -- | Homing-missile companion: every cooldown it picks a RANDOM live enemy and
--- launches a homing missile at it.
-missileCompanion :: Script ()
-missileCompanion = run 7777 0
+-- launches a homing missile at it. The seed makes two of the same companion
+-- behave independently.
+missileCompanion :: Int -> Script ()
+missileCompanion seed0 = run seed0 0
   where
     run seed cooldown = do
       me <- getMyPos
@@ -58,9 +59,10 @@ missileCompanion = run 7777 0
       run seed' (cooldown' - dt)
 
 -- | Shotgun companion: every cooldown it targets the CLOSEST enemy and fires a
--- scattered burst of low-velocity bullets at it.
-shotgunCompanion :: Script ()
-shotgunCompanion = run 3131 0
+-- scattered burst of low-velocity bullets at it. The seed makes two of the same
+-- companion scatter independently.
+shotgunCompanion :: Int -> Script ()
+shotgunCompanion seed0 = run seed0 0
   where
     run seed cooldown = do
       me <- getMyPos

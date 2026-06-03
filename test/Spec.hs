@@ -270,7 +270,7 @@ main = hspec $ do
 
   describe "shotgunCompanion" $ do
     let towerP       = Vector2 640 620
-        comp         = companionAt (EntityId 0) (Vector2 500 624) shotgunCompanion
+        comp         = companionAt (EntityId 0) (Vector2 500 624) (shotgunCompanion 3131)
         worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
     it "fires a burst of several pellets at the closest enemy" $ do
       let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
@@ -282,7 +282,7 @@ main = hspec $ do
 
   describe "missileCompanion" $ do
     let towerP       = Vector2 640 620
-        comp         = companionAt (EntityId 0) (Vector2 500 624) missileCompanion
+        comp         = companionAt (EntityId 0) (Vector2 500 624) (missileCompanion 7777)
         worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
     it "launches a single homing missile at an enemy" $ do
       let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
