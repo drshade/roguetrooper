@@ -2,11 +2,12 @@ module Main where
 
 import qualified Data.Map.Strict     as Map
 import           RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
-                                          launchToHit, missileCompanion, missionDirector,
-                                          nearestEnemy, pellet, repulsorCompanion,
-                                          repulsorWave, shotgunCompanion, straightBullet,
-                                          turretBehaviour, wait)
+import           RogueTrooper.Behaviours (enemyBehaviour, flameParticle, flamethrowerTurret,
+                                          groundLevel, homingMissile, launchToHit,
+                                          missileCompanion, missionDirector, nearestEnemy,
+                                          pellet, repulsorCompanion, repulsorWave,
+                                          shotgunCompanion, straightBullet, turretBehaviour,
+                                          wait)
 import           RogueTrooper.Engine     (World (..), applyEvents, integrate,
                                           resolveTowerHits, step)
 import           RogueTrooper.Script     (Script, spawnEnemyAt)
@@ -49,6 +50,7 @@ testProjectile pt origin = case pt of
   Pellet v            -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 2)) v 1 pellet
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
   RepulsorWave o      -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave o)
+  Flame v             -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v)
 
 testEnemyFactory :: Vector2 -> Entity
 testEnemyFactory p = Entity (EntityId 0) Enemy (Box p (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
@@ -239,6 +241,29 @@ main = hspec $ do
       let gs' = step (worldWith [(EntityId 1, Vector2 110 110, Vector2 0 0)])
                      (mkGameState [turretE, mkEnemyAt (EntityId 1) (Vector2 110 110)] towerP 10)
       length (projectilesOf gs') `shouldBe` 1
+
+  describe "flamethrowerTurret (primary)" $ do
+    let towerP  = Vector2 640 620
+        turretE = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 0)) (Vector2 0 0) 1 (flamethrowerTurret 5150)
+        world   = testWorld 0.016 (Vector2 640 360) towerP
+    it "sprays a puff of several flame particles toward the crosshair" $ do
+      let gs' = step world (mkGameState [turretE] towerP 10)
+      length (projectilesOf gs') `shouldSatisfy` (> 1)
+
+  describe "flameParticle" $ do
+    let towerP       = Vector2 640 620
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+        flame i p v  = Entity i (Projectile (Flame v)) (Box p (Circle 5)) v 1 (flameParticle v)
+    it "burns an overlapping enemy a little, then despawns (no knockback)" $ do
+      let enemyP = Vector2 500 500
+          gs     = mkGameState [mkEnemyAt (EntityId 1) enemyP, flame (EntityId 2) enemyP (Vector2 700 0)] towerP 10
+          gs'    = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
+      ((.hp) <$> Map.lookup (EntityId 1) gs'.entities) `shouldBe` Just 2   -- 1 damage
+      Map.member (EntityId 2) gs'.entities `shouldBe` False               -- particle spent
+    it "flies straight: gravity does not accumulate (vy stays bounded)" $ do
+      let gs0 = mkGameState [flame (EntityId 2) (Vector2 300 300) (Vector2 700 0)] towerP 10
+          gs3 = stepN (worldWith []) 3 gs0
+      velOf (EntityId 2) gs3 `shouldSatisfy` maybe False (\(Vector2 vx vy) -> vx == 700 && abs vy < 25)
 
   describe "homingMissile" $ do
     let towerP       = Vector2 640 620

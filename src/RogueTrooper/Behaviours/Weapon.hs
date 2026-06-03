@@ -1,26 +1,29 @@
 -- | The turret and its projectiles (weapon scripts). Content only.
 module RogueTrooper.Behaviours.Weapon
   ( turretBehaviour
+  , flamethrowerTurret
   , straightBullet
   , pellet
   , homingMissile
+  , flameParticle
   , repulsorWave
   , bulletSpeed
   , missileLaunchSpeed
   ) where
 
 import           Raylib.Types                   (Vector2, pattern Vector2)
-import           Raylib.Util.Math               (magnitude, vectorDistance,
-                                                 vectorNormalize, (|*), (|-|))
+import           Raylib.Util.Math               (magnitude, vector2Rotate,
+                                                 vectorDistance, vectorNormalize,
+                                                 (|*), (|-|))
 import           RogueTrooper.Behaviours.Common (launchToHit, launchToward,
-                                                 offScreen, onLand, seekAt)
+                                                 offScreen, onLand, randFloat, seekAt)
 import           RogueTrooper.Script            (EntityId, ProjectileType (..),
                                                  Script, damage, despawnSelf,
                                                  fire, getAimPos, getDt,
                                                  getEnemies, getEntityPos,
                                                  getGravity, getMyPos, getMyVel,
                                                  getTowerPos, push, setRadius,
-                                                 steer, yield)
+                                                 setVel, steer, yield)
 
 -- Turret ---------------------------------------------------------------------
 
@@ -56,6 +59,88 @@ turretBehaviour = turret 0
       dt <- getDt
       yield
       turret (cooldown' - dt)
+
+-- Flamethrower ---------------------------------------------------------------
+
+-- | flameRange = how far particles reach (px); flameSpeed = their muzzle speed;
+-- flameArc = full cone width (radians); flameInterval = seconds between puffs;
+-- flameParticlesPerPuff = particles emitted each puff.
+flameRange, flameSpeed, flameArc, flameInterval :: Float
+flameRange    = 300
+flameSpeed    = 700
+flameArc      = 0.44                 -- ~25°
+flameInterval = 0.035
+
+flameParticlesPerPuff :: Int
+flameParticlesPerPuff = 4
+
+-- | Slowest particles leave at this fraction of 'flameSpeed' (varying speed
+-- gives the cone depth and a ragged leading edge).
+flameSpeedMin :: Float
+flameSpeedMin = 0.7
+
+-- | The flamethrower primary: the turret tracks the crosshair at the normal turn
+-- speed and, on a fast cadence, sprays a puff of short-lived flame particles in a
+-- wide cone toward where it points. Player-aimed; the seed varies the spread.
+flamethrowerTurret :: Int -> Script ()
+flamethrowerTurret seed0 = turret seed0 0
+  where
+    turret seed cooldown = do
+      aim   <- getAimPos
+      seekAt scanSpeed aim                                  -- same slow turn as the bullet turret
+      (cooldown', seed') <-
+        if cooldown <= 0
+          then do
+            tower <- getTowerPos
+            scan  <- getMyPos
+            let dir        = aimUnit (scan |-| tower)
+                (vels, s') = flamePuff seed dir flameParticlesPerPuff
+            mapM_ (\v -> fire tower (Flame v)) vels
+            pure (flameInterval, s')
+          else pure (cooldown, seed)
+      dt <- getDt
+      yield
+      turret seed' (cooldown' - dt)
+
+    aimUnit d = if magnitude d < 1 then Vector2 0 (-1) else vectorNormalize d
+
+-- | @n@ flame velocities fanned within @flameArc@ of @dir@, each at a random
+-- speed in [flameSpeedMin, 1] × 'flameSpeed'. Threads the RNG seed.
+flamePuff :: Int -> Vector2 -> Int -> ([Vector2], Int)
+flamePuff seed0 dir n = go seed0 n []
+  where
+    go s 0 acc = (acc, s)
+    go s k acc =
+      let (u1, s1) = randFloat s
+          (u2, s2) = randFloat s1
+          ang = (u1 * 2 - 1) * (flameArc / 2)
+          spd = flameSpeed * (flameSpeedMin + (1 - flameSpeedMin) * u2)
+       in go s2 (k - 1) (vector2Rotate dir ang |* spd : acc)
+
+-- | A flame particle: flies straight at its launch velocity (kinematic — no
+-- gravity droop), burning the first enemy it touches for a little damage (no
+-- knockback). Expires after 'flameRange' worth of travel or off-screen.
+flameParticle :: Vector2 -> Script ()
+flameParticle vel = burn (flameRange / flameSpeed)
+  where
+    burn life = do
+      setVel vel                                           -- hold a straight line
+      me <- getMyPos
+      es <- getEnemies
+      case [tid | (tid, p) <- es, vectorDistance me p <= flameHitRadius] of
+        tid : _ -> damage tid flameDamage >> despawnSelf
+        []
+          | life <= 0 || offScreen me -> despawnSelf
+          | otherwise                 -> do
+              dt <- getDt
+              yield
+              burn (life - dt)
+
+flameDamage :: Int
+flameDamage = 1
+
+flameHitRadius :: Float
+flameHitRadius = 14
 
 -- Straight bullet (a flatter, faster ballistic round) ------------------------
 
@@ -171,8 +256,8 @@ impulseAlong strength v
 -- reaches before fading; waveKnockback = how hard it shoves whatever it reaches.
 waveSpeed, waveMaxRadius, waveKnockback :: Float
 waveSpeed     = 900
-waveMaxRadius = 340
-waveKnockback = 560
+waveMaxRadius = 550
+waveKnockback = 1000
 
 -- | A repulsion wave: a non-damaging pulse anchored at its origin whose radius
 -- grows each frame. Any enemy the expanding front first reaches is shoved

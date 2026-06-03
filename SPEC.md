@@ -25,8 +25,8 @@ the turret, waves, and upgrades) authorable as an embedded DSL decoupled from th
 
 **In scope**
 - Single fixed central tower with a mouse-directed, slow-seeking auto-firing turret.
-- Aiming mechanic: a mouse-tracked **aiming box** (crosshair) and a lagging **scanbox**
-  that seeks toward it; the player-aimed primary weapon fires at the scanbox centre.
+- Aiming mechanic: a mouse-tracked **crosshair** and a turret that turns toward it at a
+  finite speed (an invisible lagging aim point); the player-aimed primary weapon fires that way.
 - Up to 2 autonomous **companion weapons** beside the main turret, each with its own target acquisition.
 - Descending (parachuting) enemy waves that land and advance on the tower, Paratrooper-style.
 - Round-based structure with escalating difficulty and a fixed maximum round count (guaranteed ending).
@@ -55,11 +55,12 @@ fuller enemy roster / wave content may land in month 2.
 ## Functional Requirements
 
 ### Turret & Aiming
-- **Must**: An aiming box (a shape with a crosshair centre, initially a circle) tracks the mouse position exactly.
-- **Must**: A scanbox seeks toward the aiming box at a finite, **constant** seek speed (non-physical reticle — no damping or forces), visibly lagging on both axes.
-- **Must**: The main turret auto-fires its **primary weapon** on a fixed interval (fire rate); the player never clicks to fire.
-- **Must**: The primary weapon is **player-aimed**: every cadence it fires toward the scanbox centre (no auto-lock onto enemies). The default primary is a ballistic straight bullet whose launch velocity is gravity-corrected to land on the scanbox.
-- **Should**: Seek speed, box size, and box shape (circle → oval → square, …) are upgradeable; the primary weapon itself is replaceable/upgradeable.
+- **Must**: A crosshair tracks the mouse position exactly (the player's aim cursor).
+- **Must**: The main turret tracks the crosshair at a finite, **constant** turn speed, visibly lagging — an invisible smoothed aim point (the barrel/stream points at it). There is no visible targeting reticle or lock-on marker.
+- **Must**: The main turret auto-fires its **primary weapon** on a fixed cadence; the player never clicks to fire.
+- **Must**: The primary weapon is **player-aimed**: it fires toward where the turret points (no auto-lock onto enemies). The primary is replaceable/upgradeable.
+- **Should**: At least two primaries exist by demo: a **ballistic straight bullet** (launch velocity gravity-corrected to land on the aim point) and a **flamethrower** (short-range, high-rate stream of flame particles sprayed in a ~25° cone, low damage each, no knockback).
+- **Should**: Turn speed and the equipped primary are upgradeable.
 
 ### Companion Weapons
 - **Must**: Up to **2 companion weapon slots**: additional fully-autonomous turrets placed beside the main turret, acquired through in-level upgrades/rewards (hardcoded beside the tower for now; the slot-picking system is deferred).
@@ -136,8 +137,8 @@ Policy: **test the pure core, eyeball the rest** — the test pyramid applied ho
 
 ## Acceptance Criteria
 
-- Given the game is running, when the mouse moves, then the aiming box tracks it exactly and the scanbox seeks toward it at the current constant seek speed, visibly lagging.
-- Given the fire timer elapses, when the main turret fires its primary weapon, then it launches a projectile aimed at the scanbox centre (regardless of whether any enemy is present — no auto-lock).
+- Given the game is running, when the mouse moves, then the crosshair tracks it exactly and the turret turns toward it at the current constant turn speed, visibly lagging.
+- Given the fire cadence elapses, when the main turret fires its primary weapon, then it emits projectile(s) aimed where the turret points (regardless of whether any enemy is present — no auto-lock).
 - Given a companion weapon and at least one live enemy, when the companion's cooldown elapses, then it acquires a target per its own behaviour (closest for the shotgun, random for the missile) and fires; given no live enemies, it holds fire.
 - Given an enemy finishes parachuting, when it lands, then it switches to advancing toward the tower.
 - Given an advancing enemy reaches the tower, then tower HP decreases by 1 and the enemy is removed.

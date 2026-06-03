@@ -9,20 +9,20 @@ module RogueTrooper
 import qualified Data.Map.Strict         as Map
 import           Raylib.Core             (clearBackground, getFPS, getFrameTime,
                                           getMousePosition)
-import           Raylib.Core.Shapes      (drawCircleLinesV, drawEllipseLines,
-                                          drawLineV, drawRectangleLinesEx)
+import           Raylib.Core.Shapes      (drawCircleLinesV, drawCircleV,
+                                          drawEllipseLines, drawLineV,
+                                          drawRectangleLinesEx)
 import           Raylib.Core.Text        (drawText)
 import           Raylib.Types            (Color, Vector2, pattern Rectangle,
                                           pattern Vector2)
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
-import           RogueTrooper.Aim        (nearestInBox)
 import           RogueTrooper.Art        (companionSprite, drawSprite, paratrooperSprite,
                                           renderMissile, renderTurret, trooperSprite)
-import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
-                                          missileCompanion, missionDirector, pellet,
-                                          repulsorCompanion, repulsorWave, shotgunCompanion,
-                                          straightBullet, turretBehaviour)
+import           RogueTrooper.Behaviours (enemyBehaviour, flameParticle, flamethrowerTurret,
+                                          groundLevel, homingMissile, missileCompanion,
+                                          missionDirector, pellet, repulsorCompanion,
+                                          repulsorWave, shotgunCompanion, straightBullet)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Script     (Script)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..),
@@ -50,6 +50,11 @@ companionLoadout =
   , repulsorCompanion
   ]
 
+-- | The equipped primary weapon — the main turret's player-aimed gun. Swap this
+-- for @turretBehaviour@ (the ballistic straight-bullet gun) to change loadout.
+primaryWeapon :: Script ()
+primaryWeapon = flamethrowerTurret 5150
+
 initialState :: GameState
 initialState =
   GameState
@@ -62,7 +67,10 @@ initialState =
   where
     towerPos     = Vector2 640 620   -- just above the ground line
     Vector2 tx _ = towerPos
-    turret       = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
+    -- the turret entity is an invisible aim tracker: it seeks the crosshair at a
+    -- finite turn speed (its centre is the smoothed aim point) and carries the
+    -- equipped primary weapon script. No longer a visible/targeting "scanbox".
+    turret       = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 0)) (Vector2 0 0) 1 primaryWeapon
     director     = Entity (EntityId 1) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 missionDirector
     -- evenly flank the tower: -150, +150, -300, +300, …
     offsets      = take (length companionLoadout) (concat [[negate g, g] | i <- [1 :: Int ..], let g = fromIntegral i * 150])
@@ -80,6 +88,7 @@ mkProjectile pt origin = case pt of
   Pellet v            -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 2)) v 1 pellet
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
   RepulsorWave waveOrigin -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave waveOrigin)
+  Flame v             -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v)
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
 -- have 3 hit points.
@@ -100,20 +109,18 @@ frame gs = do
       world     = World dt mouse gs.tower worldGravity groundLevel enemyList mkProjectile spawnEnemy
       gs'       = step world gs
       ents      = Map.elems gs'.entities
-      enemies   = [e | e <- ents, e.kind == Enemy]
       mTurret   = find (\e -> e.kind == Turret) ents
   drawing $ do
     clearBackground Colors.black
     renderGround
     maybe (pure ()) (\t -> renderTurret gs'.tower t.box.center) mTurret
     mapM_ renderEntity ents
-    maybe (pure ()) (\t -> renderLockOn t.box enemies) mTurret
     renderAimBox mouse
     drawText ("Tower HP: " <> show gs'.towerHp) 20 20 20 Colors.rayWhite
     drawText ("Score: " <> show gs'.score) 20 48 20 Colors.rayWhite
     fps <- getFPS
     drawText ("FPS: " <> show fps) 20 76 20 Colors.lime
-    drawText "move mouse to aim - turret fires toward the scanbox" 20 (screenHeight - 36) 18 Colors.darkGray
+    drawText "move mouse to aim - the turret tracks the crosshair" 20 (screenHeight - 36) 18 Colors.darkGray
   pure gs'
 
 -- | Draw the ground line across the screen.
@@ -124,7 +131,7 @@ renderGround =
 -- | Draw a single entity by its kind.
 renderEntity :: Entity -> IO ()
 renderEntity e = case e.kind of
-  Turret                         -> renderBox Colors.lime e.box   -- scanbox reticle
+  Turret                         -> pure ()                       -- invisible aim tracker (barrel drawn by renderTurret)
   Companion                      -> drawSprite e.box.center companionSprite
   Enemy                          -> do
     let Vector2 _ y = e.box.center
@@ -134,7 +141,14 @@ renderEntity e = case e.kind of
   Projectile (Pellet _)          -> renderBox Colors.orange e.box
   Projectile (HomingMissile _ _) -> renderMissile e.box.center e.vel
   Projectile (RepulsorWave waveOrigin) -> renderBox Colors.skyBlue (e.box { center = waveOrigin })
+  Projectile (Flame _)           -> renderFlame e.box
   Director                       -> pure ()                       -- invisible mission script
+
+-- | Draw a flame particle: a small filled orange blob.
+renderFlame :: Box -> IO ()
+renderFlame box = case box.shape of
+  Circle r -> drawCircleV box.center r Colors.orange
+  _        -> pure ()
 
 -- | Draw the targeting-region outline for a box, by shape.
 renderBox :: Color -> Box -> IO ()
@@ -161,11 +175,4 @@ renderAimBox m = do
   drawCircleLinesV m 14 Colors.rayWhite
   drawLineV (Vector2 (mx - k) my) (Vector2 (mx + k) my) Colors.rayWhite
   drawLineV (Vector2 mx (my - k)) (Vector2 mx (my + k)) Colors.rayWhite
-
--- | Draw a lock-on marker on the enemy the turret is currently targeting.
-renderLockOn :: Box -> [Entity] -> IO ()
-renderLockOn scanbox enemies =
-  case nearestInBox scanbox [(e.box.center, e.box.center) | e <- enemies] of
-    Just p  -> drawCircleLinesV p 20 Colors.yellow
-    Nothing -> pure ()
 
