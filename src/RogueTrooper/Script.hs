@@ -44,6 +44,7 @@ newtype EntityId = EntityId Int
 -- its behaviour needs, and drives which script it runs and how it is rendered.
 data ProjectileType
   = StraightBullet Vector2          -- ^ launched with this initial velocity (then ballistic under gravity)
+  | Pellet Vector2                  -- ^ a small shotgun pellet: like a bullet but smaller and weaker
   | HomingMissile EntityId Vector2  -- ^ homes on the target enemy; launched with this initial velocity
   deriving (Eq, Show)
 

@@ -2,6 +2,7 @@
 module RogueTrooper.Behaviours.Weapon
   ( turretBehaviour
   , straightBullet
+  , pellet
   , homingMissile
   , bulletSpeed
   , missileLaunchSpeed
@@ -69,24 +70,43 @@ bulletHitRadius = 18
 knockbackStrength :: Float
 knockbackStrength = 260
 
--- | A ballistic bullet (launched with a velocity, then curved by gravity). Each
--- frame it checks for an overlapping enemy — emitting damage + knockback +
--- despawn — and despawns on hitting the ground or leaving the screen.
-straightBullet :: Script ()
-straightBullet = fly
+-- | Shotgun pellet stats: smaller hit radius, less damage and knockback than a
+-- primary bullet (there are several per burst).
+pelletDamage :: Int
+pelletDamage = 1
+
+pelletHitRadius, pelletKnockback :: Float
+pelletHitRadius = 10
+pelletKnockback = 120
+
+-- | A ballistic round (launched with a velocity, then curved by gravity).
+-- Parametrised by its damage / hit radius / knockback so primary bullets and
+-- shotgun pellets share the flight logic. Each frame it checks for an
+-- overlapping enemy — emitting damage + knockback + despawn — and despawns on
+-- hitting the ground or leaving the screen.
+ballistic :: Int -> Float -> Float -> Script ()
+ballistic dmg hitRadius knockback = fly
   where
     fly = do
       me <- getMyPos
       es <- getEnemies
-      case [tid | (tid, p) <- es, vectorDistance me p <= bulletHitRadius] of
+      case [tid | (tid, p) <- es, vectorDistance me p <= hitRadius] of
         tid : _ -> do
-          damage tid bulletDamage
+          damage tid dmg
           v <- getMyVel
-          push tid (impulseAlong knockbackStrength v)
+          push tid (impulseAlong knockback v)
           despawnSelf
         []
           | onLand me || offScreen me -> despawnSelf
           | otherwise                 -> yield >> fly
+
+-- | The turret's primary round.
+straightBullet :: Script ()
+straightBullet = ballistic bulletDamage bulletHitRadius knockbackStrength
+
+-- | A shotgun pellet: a smaller, weaker ballistic round.
+pellet :: Script ()
+pellet = ballistic pelletDamage pelletHitRadius pelletKnockback
 
 -- Homing missile -------------------------------------------------------------
 

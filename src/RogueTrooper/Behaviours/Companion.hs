@@ -24,8 +24,8 @@ shotgunPellets :: Int
 shotgunPellets = 5
 
 shotgunSpeed, shotgunSpread :: Float
-shotgunSpeed  = 900          -- punchy initial velocity, still gravity-dropped → short range
-shotgunSpread = 0.35         -- radians (~20°)
+shotgunSpeed  = 2000         -- high muzzle velocity (pellets still gravity-dropped)
+shotgunSpread = 0.12         -- radians (~7°) — tight initial grouping
 
 -- | Homing-missile companion: every cooldown it picks a RANDOM live enemy and
 -- launches a homing missile at it.
@@ -62,7 +62,7 @@ shotgunCompanion = run 3131 0
                    let d   = tpos |-| me
                        dir = if magnitude d < 1 then Vector2 0 (-1) else vectorNormalize d
                        (vels, seed'') = scatter seed dir shotgunPellets shotgunSpeed shotgunSpread
-                   mapM_ (\v -> fire me (StraightBullet v)) vels
+                   mapM_ (\v -> fire me (Pellet v)) vels
                    pure (shotgunCooldown, seed'')
                  Nothing -> pure (cooldown, seed)
           else pure (cooldown, seed)

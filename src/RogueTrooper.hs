@@ -20,7 +20,7 @@ import           RogueTrooper.Aim        (nearestInBox)
 import           RogueTrooper.Art        (companionSprite, drawSprite, paratrooperSprite,
                                           renderMissile, renderTurret, trooperSprite)
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
-                                          missileCompanion, missionDirector,
+                                          missileCompanion, missionDirector, pellet,
                                           shotgunCompanion, straightBullet,
                                           turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
@@ -65,6 +65,7 @@ initialState =
 mkProjectile :: ProjectileType -> Vector2 -> Entity
 mkProjectile pt origin = case pt of
   StraightBullet v    -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
+  Pellet v            -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 2)) v 1 pellet
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
@@ -117,6 +118,7 @@ renderEntity e = case e.kind of
     drawSprite e.box.center (if y >= groundLevel then trooperSprite else paratrooperSprite)
     renderEnemyHp e
   Projectile (StraightBullet _)  -> renderBox Colors.gold e.box
+  Projectile (Pellet _)          -> renderBox Colors.orange e.box
   Projectile (HomingMissile _ _) -> renderMissile e.box.center e.vel
   Director                       -> pure ()                       -- invisible mission script
 
