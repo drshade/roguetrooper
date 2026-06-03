@@ -4,20 +4,20 @@ module RogueTrooper.Behaviours.Mission
   ( missionDirector
   ) where
 
-import           Raylib.Types        (pattern Vector2)
+import           Raylib.Types                   (pattern Vector2)
 import           RogueTrooper.Behaviours.Common (wait)
-import           RogueTrooper.Script (Script, spawnEnemyAt, yield)
+import           RogueTrooper.Script            (Script, spawnEnemyAt, yield)
 
 -- | Seconds between trooper drops within a round, and between rounds.
 dropInterval, betweenRounds :: Float
 dropInterval = 0.6
-betweenRounds = 5
+betweenRounds = 8
 
 -- | The mission: a sequence of rounds, each dropping N troopers paced over time
 -- with a gap between rounds, then idle. Carries its own RNG seed for drop
 -- positions, so the mission is deterministic.
 missionDirector :: Script ()
-missionDirector = runRounds 12345 [3, 5, 8]
+missionDirector = runRounds 12345 [5, 8, 11, 13, 15, 17, 19, 100]
   where
     runRounds :: Int -> [Int] -> Script ()
     runRounds _    []         = forever yield          -- mission complete

@@ -6,26 +6,36 @@ module RogueTrooper.Behaviours.Companion
   ) where
 
 import           Raylib.Types                   (Vector2, pattern Vector2)
-import           Raylib.Util.Math               (magnitude, vector2Rotate, vectorNormalize,
-                                                 (|*), (|-|))
-import           RogueTrooper.Behaviours.Common (launchToward, nearestEnemy, randFloat, randIndex)
+import           Raylib.Util.Math               (magnitude, vectorNormalize,
+                                                 (|*), (|+|), (|-|))
+import           RogueTrooper.Behaviours.Common (launchToward, nearestEnemy,
+                                                 randFloat, randIndex)
 import           RogueTrooper.Behaviours.Weapon (missileLaunchSpeed)
-import           RogueTrooper.Script            (ProjectileType (..), Script, fire, getDt,
-                                                 getEnemies, getMyPos, yield)
+import           RogueTrooper.Script            (ProjectileType (..), Script,
+                                                 fire, getDt, getEnemies,
+                                                 getMyPos, yield)
 
 -- | Cooldowns are longer than the main turret's (companions start weaker).
 missileCooldown, shotgunCooldown :: Float
 missileCooldown = 3.0
 shotgunCooldown = 1.6
 
--- | Shotgun: a burst of low-velocity pellets (so they don't travel far) spread
--- around the aim direction.
+-- | Shotgun: a burst of pellets sprayed into a randomized oval cloud leaving
+-- the muzzle.
 shotgunPellets :: Int
-shotgunPellets = 5
+shotgunPellets = 17
 
-shotgunSpeed, shotgunSpread :: Float
-shotgunSpeed  = 2000         -- high muzzle velocity (pellets still gravity-dropped)
-shotgunSpread = 0.12         -- radians (~7°) — tight initial grouping
+-- | Base muzzle velocity of the burst (pellets are then gravity-dropped).
+shotgunSpeed :: Float
+shotgunSpeed = 1500
+
+-- | The muzzle "oval": half-extents of each pellet's random velocity offset,
+-- perpendicular to (sideways fan) and along (forward/back, i.e. speed variation)
+-- the firing direction, in px/s. Along > perp makes the cloud an oval elongated
+-- in the direction of travel.
+shotgunSpreadPerp, shotgunSpreadAlong :: Float
+shotgunSpreadPerp  = 260
+shotgunSpreadAlong = 520
 
 -- | Homing-missile companion: every cooldown it picks a RANDOM live enemy and
 -- launches a homing missile at it.
@@ -61,7 +71,8 @@ shotgunCompanion = run 3131 0
                  Just (_, tpos) -> do
                    let d   = tpos |-| me
                        dir = if magnitude d < 1 then Vector2 0 (-1) else vectorNormalize d
-                       (vels, seed'') = scatter seed dir shotgunPellets shotgunSpeed shotgunSpread
+                       (vels, seed'') = scatter seed dir shotgunPellets shotgunSpeed
+                                                 shotgunSpreadPerp shotgunSpreadAlong
                    mapM_ (\v -> fire me (Pellet v)) vels
                    pure (shotgunCooldown, seed'')
                  Nothing -> pure (cooldown, seed)
@@ -70,13 +81,24 @@ shotgunCompanion = run 3131 0
       yield
       run seed' (cooldown' - dt)
 
--- | @n@ velocities of magnitude @speed@ around the unit direction @dir@, each
--- rotated by a random angle in [-spread, spread]. Threads the RNG seed.
-scatter :: Int -> Vector2 -> Int -> Float -> Float -> ([Vector2], Int)
-scatter seed0 dir n speed spread = go seed0 n []
+-- | @n@ randomized velocities forming an oval "muzzle cloud" around the base
+-- shot @dir |* speed@. Each pellet draws a uniform-random point inside the unit
+-- disk (polar sampling: angle, sqrt-radius) and offsets the base velocity by it,
+-- scaled by @perp@ sideways and @along@ forward/back — so the pattern is an
+-- irregular ellipse rather than a regular arc. Threads the RNG seed.
+scatter :: Int -> Vector2 -> Int -> Float -> Float -> Float -> ([Vector2], Int)
+scatter seed0 dir n speed perp along = go seed0 n []
   where
+    Vector2 dx dy = dir
+    perpDir       = Vector2 (negate dy) dx   -- unit vector 90° from the firing direction
+    base          = dir |* speed
     go s 0 acc = (acc, s)
     go s k acc =
-      let (f, s') = randFloat s
-          ang     = (f * 2 - 1) * spread
-       in go s' (k - 1) (vector2Rotate dir ang |* speed : acc)
+      let (u1, s1) = randFloat s
+          (u2, s2) = randFloat s1
+          ang = u1 * 2 * pi
+          rad = sqrt u2                        -- sqrt → uniform over the disk's area
+          ox  = rad * cos ang                  -- sideways component of the offset
+          oy  = rad * sin ang                  -- along-axis component
+          v   = base |+| (perpDir |* (ox * perp)) |+| (dir |* (oy * along))
+       in go s2 (k - 1) (v : acc)
