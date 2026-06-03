@@ -6,13 +6,17 @@ module RogueTrooper.Behaviours.Weapon
   , bulletSpeed
   ) where
 
-import           Raylib.Types               (Vector2, pattern Vector2)
-import           Raylib.Util.Math           (magnitude, vectorDistance, vectorNormalize, (|*), (|-|))
+import           Raylib.Types                   (Vector2, pattern Vector2)
+import           Raylib.Util.Math               (magnitude, vectorDistance,
+                                                 vectorNormalize, (|*), (|-|))
 import           RogueTrooper.Behaviours.Common (offScreen, onLand, seekAt)
-import           RogueTrooper.Script        (EntityId, ProjectileType (..), Script, damage,
-                                             despawnSelf, fire, getAimPos, getDt, getEnemies,
-                                             getEntityPos, getGravity, getMyId, getMyPos, getMyVel,
-                                             getTargetInBox, getTowerPos, push, steer, yield)
+import           RogueTrooper.Script            (EntityId, ProjectileType (..),
+                                                 Script, damage, despawnSelf,
+                                                 fire, getAimPos, getDt,
+                                                 getEnemies, getEntityPos,
+                                                 getMyPos, getMyVel,
+                                                 getTargetInBox, getTowerPos,
+                                                 push, steer, yield)
 
 -- Turret ---------------------------------------------------------------------
 
@@ -95,9 +99,9 @@ straightBullet = fly
 -- accelerates / how hard it homes (lower = slower build, but more gravity droop:
 -- droop ≈ gravity / missileResponsiveness).
 missileSpeed, missileResponsiveness, missileLaunchSpeed, missileKnockback :: Float
-missileSpeed = 950
-missileResponsiveness = 4
-missileLaunchSpeed = 250
+missileSpeed = 750
+missileResponsiveness = 3
+missileLaunchSpeed = 10
 missileKnockback = 380
 
 missileDamage :: Int
@@ -106,9 +110,11 @@ missileDamage = 3
 missileHitRadius :: Float
 missileHitRadius = 20
 
--- | A homing missile: each frame it homes toward its assigned target enemy
--- (steering, so it curves), detonating (damage + knockback) on any overlap and
--- despawning on the ground / off-screen. If the target dies it coasts straight.
+-- | A homing missile: every frame its propulsion accelerates it toward a
+-- constant cruise speed; the direction is the target while it's alive, otherwise
+-- the missile's current heading (so it keeps powering on, just no longer
+-- tracking). Detonates (damage + knockback) on any overlap; despawns on the
+-- ground / off-screen.
 homingMissile :: EntityId -> Script ()
 homingMissile target = fly
   where
@@ -123,22 +129,17 @@ homingMissile target = fly
           despawnSelf
         [] -> do
           mtp <- getEntityPos target
-          case mtp of
-            -- propulsion: accelerate toward a constant cruise speed in the
-            -- target's direction (no distance-based slowdown), overcoming gravity
-            Just tp -> steer missileResponsiveness (thrustToward me tp)
-            -- target gone: cancel gravity so the (persistent) velocity keeps it
-            -- flying straight on
-            Nothing -> do
-              g    <- getGravity
-              dt   <- getDt
-              myId <- getMyId
-              push myId (g |* negate dt)
+          v   <- getMyVel
+          let dir = case mtp of
+                      Just tp -> aimUnit me tp v   -- steer toward the live target
+                      Nothing -> headingUnit v     -- no target: hold current heading
+          steer missileResponsiveness (dir |* missileSpeed)   -- always accelerate to cruise
           if onLand me || offScreen me then despawnSelf else yield >> fly
 
-    thrustToward me tp =
-      let d = tp |-| me
-       in if magnitude d < 1 then Vector2 0 0 else vectorNormalize d |* missileSpeed
+    -- unit direction toward the target (falls back to heading if it's on top of us)
+    aimUnit me tp v = let d = tp |-| me in if magnitude d < 1 then headingUnit v else vectorNormalize d
+    -- unit heading from current velocity (up if essentially stationary)
+    headingUnit v   = if magnitude v < 1 then Vector2 0 (-1) else vectorNormalize v
 
 -- | An impulse of the given magnitude in the direction of travel @v@.
 impulseAlong :: Float -> Vector2 -> Vector2
