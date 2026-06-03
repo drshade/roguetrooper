@@ -4,6 +4,7 @@ module RogueTrooper.Behaviours.Weapon
   , straightBullet
   , pellet
   , homingMissile
+  , repulsorWave
   , bulletSpeed
   , missileLaunchSpeed
   ) where
@@ -18,7 +19,8 @@ import           RogueTrooper.Script            (EntityId, ProjectileType (..),
                                                  fire, getAimPos, getDt,
                                                  getEnemies, getEntityPos,
                                                  getGravity, getMyPos, getMyVel,
-                                                 getTowerPos, push, steer, yield)
+                                                 getTowerPos, push, setRadius,
+                                                 steer, yield)
 
 -- Turret ---------------------------------------------------------------------
 
@@ -162,3 +164,37 @@ impulseAlong :: Float -> Vector2 -> Vector2
 impulseAlong strength v
   | magnitude v < 1 = Vector2 0 0
   | otherwise       = vectorNormalize v |* strength
+
+-- Repulsor wave --------------------------------------------------------------
+
+-- | waveSpeed = how fast the wavefront expands (px/s); waveMaxRadius = how far it
+-- reaches before fading; waveKnockback = how hard it shoves whatever it reaches.
+waveSpeed, waveMaxRadius, waveKnockback :: Float
+waveSpeed     = 900
+waveMaxRadius = 340
+waveKnockback = 560
+
+-- | A repulsion wave: a non-damaging pulse anchored at its origin whose radius
+-- grows each frame. Any enemy the expanding front first reaches is shoved
+-- radially outward exactly once (tracked in @hit@). Despawns at max radius.
+-- Knockback and the drawn ring both use the fixed @origin@, so the wave's own
+-- (ignored, gravity-bound) position never matters.
+repulsorWave :: Vector2 -> Script ()
+repulsorWave origin = expand 0 []
+  where
+    expand radius hit = do
+      dt <- getDt
+      let radius' = radius + waveSpeed * dt
+      setRadius radius'                                   -- grow the visual / hit ring
+      es <- getEnemies
+      let fresh = [ (i, p) | (i, p) <- es, i `notElem` hit, vectorDistance origin p <= radius' ]
+      mapM_ (\(i, p) -> push i (shoveFrom origin p waveKnockback)) fresh
+      if radius' >= waveMaxRadius
+        then despawnSelf
+        else yield >> expand radius' (hit <> map fst fresh)
+
+-- | An outward impulse of magnitude @strength@, pushing @target@ away from @from@.
+shoveFrom :: Vector2 -> Vector2 -> Float -> Vector2
+shoveFrom from target strength =
+  let d = target |-| from
+   in if magnitude d < 1 then Vector2 0 (negate strength) else vectorNormalize d |* strength

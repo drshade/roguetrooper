@@ -65,7 +65,7 @@ fuller enemy roster / wave content may land in month 2.
 - **Must**: Up to **2 companion weapon slots**: additional fully-autonomous turrets placed beside the main turret, acquired through in-level upgrades/rewards (hardcoded beside the tower for now; the slot-picking system is deferred).
 - **Must**: Companions are **fully autonomous** — they acquire their own targets and fire without player aiming. They may be weaker / have longer cooldowns than the primary.
 - **Must**: Target acquisition is **encoded per-companion in its behaviour script** (not a shared engine rule) — e.g. closest, random, min-range, ground-only.
-- **Should**: Two companions exist by demo: a **homing-missile** companion (targets a randomly selected live enemy) and a **shotgun** companion (targets the closest enemy, firing a single burst of ~5 low-velocity scattered pellets).
+- **Should**: Several companions exist by demo: a **homing-missile** companion (targets a randomly selected live enemy), a **shotgun** companion (targets the closest enemy, firing a burst of scattered pellets), and a **repulsor-field** companion (emits an expanding wave that knocks enemies radially outward, dealing no damage — pure crowd control).
 
 ### Enemies
 - **Must**: Enemies spawn at the screen edges/top and parachute toward the ground.

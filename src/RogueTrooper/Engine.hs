@@ -62,6 +62,7 @@ runEntityFrame world ent = go [] ent.script
       Free (GetTargetInBox k)       -> go evs (k (targetInBox ent.box world.enemyList))
       Free (DoSteer resp tgt next)  -> go (Steer ent.eid resp tgt : evs) next
       Free (DoSetVel v next)        -> go (SetVel ent.eid v : evs) next
+      Free (DoSetRadius r next)     -> go (Resize ent.eid r : evs) next
       Free (DoPush tid dv next)     -> go (Impulse tid dv : evs) next
       Free (Fire origin pt next)    -> go (Spawn pt origin : evs) next
       Free (SpawnEnemyAt pos next)  -> go (SpawnEnemy pos : evs) next
@@ -81,6 +82,8 @@ applyEvents world evs gs0 = foldl' apply gs0 evs
       gs { entities = Map.adjust (\e -> e { vel = e.vel |+| ((tgt |-| e.vel) |* min 1 (resp * dt')) }) i gs.entities }
     apply gs (SetVel i v) =
       gs { entities = Map.adjust (\e -> e { vel = v }) i gs.entities }
+    apply gs (Resize i r) =
+      gs { entities = Map.adjust (\e -> e { box = e.box { shape = Circle r } }) i gs.entities }
     apply gs (Impulse i dv) =
       gs { entities = Map.adjust (\e -> e { vel = e.vel |+| dv }) i gs.entities }
     apply gs (SetScript i k) = gs { entities = Map.adjust (\e -> e { script = k }) i gs.entities }

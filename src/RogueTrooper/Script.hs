@@ -24,6 +24,7 @@ module RogueTrooper.Script
   , getTargetInBox
   , steer
   , setVel
+  , setRadius
   , push
   , fire
   , spawnEnemyAt
@@ -46,6 +47,7 @@ data ProjectileType
   = StraightBullet Vector2          -- ^ launched with this initial velocity (then ballistic under gravity)
   | Pellet Vector2                  -- ^ a small shotgun pellet: like a bullet but smaller and weaker
   | HomingMissile EntityId Vector2  -- ^ homes on the target enemy; launched with this initial velocity
+  | RepulsorWave Vector2            -- ^ a non-damaging pulse that expands from this origin, shoving enemies outward
   deriving (Eq, Show)
 
 -- | The instruction set. Grows on demand as behaviours need new verbs.
@@ -62,6 +64,7 @@ data ScriptF next
   | GetTargetInBox (Maybe (EntityId, Vector2) -> next) -- ^ query: nearest enemy in MY box (id, position)
   | DoSteer Float Vector2 next                -- ^ command: ease my velocity toward a target (responsiveness, target velocity)
   | DoSetVel Vector2 next                     -- ^ command: hard-set my velocity (kinematic — no forces/easing)
+  | DoSetRadius Float next                    -- ^ command: set my hitbox to a circle of this radius (e.g. an expanding ring)
   | DoPush EntityId Vector2 next              -- ^ effect: apply an impulse (Δv) to an entity
   | Fire Vector2 ProjectileType next          -- ^ effect: spawn a projectile from a given origin
   | SpawnEnemyAt Vector2 next                 -- ^ effect: spawn an enemy at a position
@@ -122,6 +125,11 @@ steer responsiveness target = liftF (DoSteer responsiveness target ())
 -- and easing). For non-physical entities like the scanbox reticle.
 setVel :: Vector2 -> Script ()
 setVel v = liftF (DoSetVel v ())
+
+-- | Set this entity's hitbox to a circle of the given radius. Used by effects
+-- that grow, like an expanding repulsion ring.
+setRadius :: Float -> Script ()
+setRadius r = liftF (DoSetRadius r ())
 
 -- | Apply an impulse (instant change in velocity) to an entity. Used for knockback.
 push :: EntityId -> Vector2 -> Script ()

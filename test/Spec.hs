@@ -4,8 +4,9 @@ import qualified Data.Map.Strict     as Map
 import           RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
                                           launchToHit, missileCompanion, missionDirector,
-                                          nearestEnemy, pellet, shotgunCompanion,
-                                          straightBullet, turretBehaviour, wait)
+                                          nearestEnemy, pellet, repulsorCompanion,
+                                          repulsorWave, shotgunCompanion, straightBullet,
+                                          turretBehaviour, wait)
 import           RogueTrooper.Engine     (World (..), applyEvents, integrate,
                                           resolveTowerHits, step)
 import           RogueTrooper.Script     (Script, spawnEnemyAt)
@@ -47,6 +48,7 @@ testProjectile pt origin = case pt of
   StraightBullet v    -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
   Pellet v            -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 2)) v 1 pellet
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
+  RepulsorWave o      -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave o)
 
 testEnemyFactory :: Vector2 -> Entity
 testEnemyFactory p = Entity (EntityId 0) Enemy (Box p (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
@@ -289,6 +291,35 @@ main = hspec $ do
                      (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
       length (projectilesOf gs') `shouldBe` 1
     it "holds fire when there are no enemies" $ do
+      let gs' = step (worldWith []) (mkGameState [comp] towerP 10)
+      length (projectilesOf gs') `shouldBe` 0
+
+  describe "repulsorWave" $ do
+    let towerP       = Vector2 640 620
+        origin       = Vector2 300 300
+        worldWith es = (testWorld 0.1 (Vector2 0 0) towerP) { enemyList = es }
+        wave i       = Entity i (Projectile (RepulsorWave origin)) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave origin)
+    it "shoves an enemy radially outward without dealing damage" $ do
+      let enemyP = Vector2 340 300   -- 40px right of the origin, within one frame's reach
+          gs     = mkGameState [mkEnemyAt (EntityId 1) enemyP, wave (EntityId 2)] towerP 10
+          gs'    = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
+      ((.hp) <$> Map.lookup (EntityId 1) gs'.entities) `shouldBe` Just 3   -- no damage
+      velOf (EntityId 1) gs' `shouldSatisfy` maybe False (\(Vector2 vx _) -> vx > 0)  -- pushed outward (right)
+    it "does not reach an enemy beyond the wavefront yet" $ do
+      let enemyP = Vector2 800 300   -- 500px away; front only reaches 90px this frame
+          gs     = mkGameState [mkEnemyAt (EntityId 1) enemyP, wave (EntityId 2)] towerP 10
+          gs'    = step (worldWith [(EntityId 1, enemyP, Vector2 0 0)]) gs
+      velOf (EntityId 1) gs' `shouldSatisfy` maybe False (\(Vector2 vx _) -> vx == 0)  -- not yet shoved
+
+  describe "repulsorCompanion" $ do
+    let towerP       = Vector2 640 620
+        comp         = companionAt (EntityId 0) (Vector2 500 624) repulsorCompanion
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+    it "emits a repulsion wave when enemies are present" $ do
+      let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
+                     (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
+      length (projectilesOf gs') `shouldBe` 1
+    it "holds when there are no enemies" $ do
       let gs' = step (worldWith []) (mkGameState [comp] towerP 10)
       length (projectilesOf gs') `shouldBe` 0
 

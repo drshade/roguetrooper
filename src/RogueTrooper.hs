@@ -21,8 +21,8 @@ import           RogueTrooper.Art        (companionSprite, drawSprite, paratroop
                                           renderMissile, renderTurret, trooperSprite)
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
                                           missileCompanion, missionDirector, pellet,
-                                          shotgunCompanion, straightBullet,
-                                          turretBehaviour)
+                                          repulsorCompanion, repulsorWave, shotgunCompanion,
+                                          straightBullet, turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Script     (Script)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..),
@@ -47,6 +47,7 @@ companionLoadout :: [Script ()]
 companionLoadout =
   [ missileCompanion 7777
   , shotgunCompanion 3131
+  , repulsorCompanion
   ]
 
 initialState :: GameState
@@ -78,6 +79,7 @@ mkProjectile pt origin = case pt of
   StraightBullet v    -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 4)) v 1 straightBullet
   Pellet v            -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 2)) v 1 pellet
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
+  RepulsorWave waveOrigin -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave waveOrigin)
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
 -- have 3 hit points.
@@ -131,6 +133,7 @@ renderEntity e = case e.kind of
   Projectile (StraightBullet _)  -> renderBox Colors.gold e.box
   Projectile (Pellet _)          -> renderBox Colors.orange e.box
   Projectile (HomingMissile _ _) -> renderMissile e.box.center e.vel
+  Projectile (RepulsorWave waveOrigin) -> renderBox Colors.skyBlue (e.box { center = waveOrigin })
   Director                       -> pure ()                       -- invisible mission script
 
 -- | Draw the targeting-region outline for a box, by shape.

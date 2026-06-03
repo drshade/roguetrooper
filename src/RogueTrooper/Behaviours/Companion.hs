@@ -3,6 +3,7 @@
 module RogueTrooper.Behaviours.Companion
   ( missileCompanion
   , shotgunCompanion
+  , repulsorCompanion
   ) where
 
 import           Raylib.Types                   (Vector2, pattern Vector2)
@@ -16,9 +17,10 @@ import           RogueTrooper.Script            (ProjectileType (..), Script,
                                                  getMyPos, yield)
 
 -- | Cooldowns are longer than the main turret's (companions start weaker).
-missileCooldown, shotgunCooldown :: Float
-missileCooldown = 3.0
-shotgunCooldown = 1.6
+missileCooldown, shotgunCooldown, repulsorCooldown :: Float
+missileCooldown  = 3.0
+shotgunCooldown  = 1.6
+repulsorCooldown = 2.2
 
 -- | Shotgun: a burst of pellets sprayed into a randomized oval cloud leaving
 -- the muzzle.
@@ -82,6 +84,23 @@ shotgunCompanion seed0 = run seed0 0
       dt <- getDt
       yield
       run seed' (cooldown' - dt)
+
+-- | Repulsor-field companion: every cooldown (when enemies are present) it emits
+-- an expanding repulsion wave from its position that knocks enemies back without
+-- dealing damage.
+repulsorCompanion :: Script ()
+repulsorCompanion = run 0
+  where
+    run cooldown = do
+      me <- getMyPos
+      es <- getEnemies
+      cooldown' <-
+        if cooldown <= 0 && not (null es)
+          then fire me (RepulsorWave me) >> pure repulsorCooldown
+          else pure cooldown
+      dt <- getDt
+      yield
+      run (cooldown' - dt)
 
 -- | @n@ randomized velocities forming an oval "muzzle cloud" around the base
 -- shot @dir |* speed@. Each pellet draws a uniform-random point inside the unit
