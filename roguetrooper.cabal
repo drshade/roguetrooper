@@ -30,6 +30,7 @@ library
     RogueTrooper.Art
     RogueTrooper.Behaviours
     RogueTrooper.Behaviours.Common
+    RogueTrooper.Behaviours.Companion
     RogueTrooper.Behaviours.Enemy
     RogueTrooper.Behaviours.Mission
     RogueTrooper.Behaviours.Weapon

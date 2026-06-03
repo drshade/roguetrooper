@@ -4,7 +4,7 @@
 spec_type: system
 status: approved
 created: 2026-06-01
-updated: 2026-06-01
+updated: 2026-06-03
 author: Tom Wells (tom@synthesis.co.za)
 ---
 
@@ -25,8 +25,9 @@ the turret, waves, and upgrades) authorable as an embedded DSL decoupled from th
 
 **In scope**
 - Single fixed central tower with a mouse-directed, slow-seeking auto-firing turret.
-- Aiming mechanic: a mouse-tracked **aiming box** (crosshair) and a lagging **turret box**
-  that seeks toward it; on fire, auto-target the nearest enemy inside the turret box.
+- Aiming mechanic: a mouse-tracked **aiming box** (crosshair) and a lagging **scanbox**
+  that seeks toward it; the player-aimed primary weapon fires at the scanbox centre.
+- Up to 2 autonomous **companion weapons** beside the main turret, each with its own target acquisition.
 - Descending (parachuting) enemy waves that land and advance on the tower, Paratrooper-style.
 - Round-based structure with escalating difficulty and a fixed maximum round count (guaranteed ending).
 - Per-round upgrade picks (choose 1 of 3) affecting the current run.
@@ -37,7 +38,7 @@ the turret, waves, and upgrades) authorable as an embedded DSL decoupled from th
 
 **Out of scope**
 - Multiplayer, online leaderboards, networking.
-- Player movement, multiple turrets, varied level geometry.
+- Player movement, a movable main turret, varied level geometry. (Fixed autonomous companion turrets beside the tower are in scope.)
 - Audio polish, story/cutscenes, settings menus beyond the minimum.
 - Mobile/web ports; cross-platform packaging (should run on Linux/Windows via raylib but untested for the jam).
 - External/parsed scripting (files, parser, serialization) — the DSL is embedded Haskell only.
@@ -55,12 +56,16 @@ fuller enemy roster / wave content may land in month 2.
 
 ### Turret & Aiming
 - **Must**: An aiming box (a shape with a crosshair centre, initially a circle) tracks the mouse position exactly.
-- **Must**: A turret box seeks toward the aiming box at a finite seek speed, visibly lagging on both axes (turret turns left/right and elevates up/down to synchronise).
-- **Must**: The turret auto-fires on a fixed interval (fire rate); the player never clicks to fire.
-- **Must**: On fire, the turret targets the **nearest enemy inside the turret box**, damages/destroys it, and visually marks the locked target (lock-on indicator).
-- **Must**: When no enemy is inside the turret box, the turret holds fire (does not fire and does not consume cadence on empty).
-- **Must Not**: Fire at or hit enemies outside the turret box.
-- **Should**: Seek speed, box size, and box shape (circle → oval → square, …) are upgradeable.
+- **Must**: A scanbox seeks toward the aiming box at a finite, **constant** seek speed (non-physical reticle — no damping or forces), visibly lagging on both axes.
+- **Must**: The main turret auto-fires its **primary weapon** on a fixed interval (fire rate); the player never clicks to fire.
+- **Must**: The primary weapon is **player-aimed**: every cadence it fires toward the scanbox centre (no auto-lock onto enemies). The default primary is a ballistic straight bullet whose launch velocity is gravity-corrected to land on the scanbox.
+- **Should**: Seek speed, box size, and box shape (circle → oval → square, …) are upgradeable; the primary weapon itself is replaceable/upgradeable.
+
+### Companion Weapons
+- **Must**: Up to **2 companion weapon slots**: additional fully-autonomous turrets placed beside the main turret, acquired through in-level upgrades/rewards (hardcoded beside the tower for now; the slot-picking system is deferred).
+- **Must**: Companions are **fully autonomous** — they acquire their own targets and fire without player aiming. They may be weaker / have longer cooldowns than the primary.
+- **Must**: Target acquisition is **encoded per-companion in its behaviour script** (not a shared engine rule) — e.g. closest, random, min-range, ground-only.
+- **Should**: Two companions exist by demo: a **homing-missile** companion (targets a randomly selected live enemy) and a **shotgun** companion (targets the closest enemy, firing a single burst of ~5 low-velocity scattered pellets).
 
 ### Enemies
 - **Must**: Enemies spawn at the screen edges/top and parachute toward the ground.
@@ -89,7 +94,7 @@ fuller enemy roster / wave content may land in month 2.
 The DSL is an embedded **free-monad** scripting language (`Script = Free ScriptF`) with three kinds of instruction: **queries** (read world state into the script, e.g. `getAimPos`), **commands** (ask the engine to act, e.g. `seekTo`), and **suspension** (`yield`, and later `wait`) so a script can describe behaviour spanning many frames. The engine interprets scripts, owning all physics/IO; scripts express only intent. (Inspired by the `~/repo/planets` free-monad scripting engine; chosen over a flat coroutine because queries + suspension let scripts decide based on live state and choreograph timed sequences.)
 
 - **Must**: Enemy behaviours are authored in this DSL, decoupled from the engine (engine simulates; behaviour describes intent).
-- **Must**: The turret's seek / target / fire behaviour is authored as a script in the same DSL.
+- **Must**: The main turret's seek / fire behaviour and each companion weapon's autonomous targeting/fire behaviour are authored as scripts in the same DSL.
 - **Must**: Waves/rounds are authored as scripts in the same DSL — a sequential timeline of spawn directives with waits and escalation (the primary motivation for suspension).
 - **Must**: Upgrades are authored as a data-shaped DSL (stat deltas / effect hooks).
 - **Should**: Scripts run on a **resumable** model: each entity stores its current continuation; the interpreter runs it each frame until `yield`/`wait` (or completion) and resumes it next frame. A purely reactive entity loops `forever (… >> yield)`; a scripted sequence runs straight through with waits between steps.
@@ -131,9 +136,9 @@ Policy: **test the pure core, eyeball the rest** — the test pyramid applied ho
 
 ## Acceptance Criteria
 
-- Given the game is running, when the mouse moves, then the aiming box tracks it exactly and the turret box accelerates toward it at the current seek speed, visibly lagging.
-- Given an enemy is inside the turret box and the fire timer elapses, when the turret fires, then it targets the nearest in-box enemy, shows a lock-on indicator, and damages it.
-- Given no enemy is inside the turret box, when the fire timer elapses, then the turret does not fire.
+- Given the game is running, when the mouse moves, then the aiming box tracks it exactly and the scanbox seeks toward it at the current constant seek speed, visibly lagging.
+- Given the fire timer elapses, when the main turret fires its primary weapon, then it launches a projectile aimed at the scanbox centre (regardless of whether any enemy is present — no auto-lock).
+- Given a companion weapon and at least one live enemy, when the companion's cooldown elapses, then it acquires a target per its own behaviour (closest for the shotgun, random for the missile) and fires; given no live enemies, it holds fire.
 - Given an enemy finishes parachuting, when it lands, then it switches to advancing toward the tower.
 - Given an advancing enemy reaches the tower, then tower HP decreases by 1 and the enemy is removed.
 - Given an enemy is killed, then score increases by 1 and a gem drops and falls to the ground.

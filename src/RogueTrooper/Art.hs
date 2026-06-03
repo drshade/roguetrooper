@@ -6,6 +6,7 @@ module RogueTrooper.Art
   , drawSprite
   , renderTurret
   , renderMissile
+  , companionSprite
   , paratrooperSprite
   , trooperSprite
   ) where
@@ -78,6 +79,17 @@ renderMissile (Vector2 cx cy) (Vector2 vx vy) = do
   seg 4 4 13   Colors.gold     -- exhaust flame at the tail
   seg 16 6 8   Colors.gray     -- body
   seg 6 6 (-2) Colors.orange   -- nose, forward
+
+-- | A small autonomous companion turret (distinct from the main turret).
+companionSprite :: Sprite
+companionSprite = Sprite
+  [('d', Colors.darkGray), ('o', Colors.orange), ('b', Colors.brown)]
+  [ "  oo  "
+  , " oooo "
+  , "dboobd"
+  , "dbbbbd"
+  , "dddddd"
+  ]
 
 -- Paratroopers ---------------------------------------------------------------
 

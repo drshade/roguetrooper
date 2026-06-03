@@ -3,7 +3,8 @@ module Main where
 import qualified Data.Map.Strict     as Map
 import           RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
-                                          launchToHit, missionDirector, straightBullet,
+                                          launchToHit, missileCompanion, missionDirector,
+                                          nearestEnemy, shotgunCompanion, straightBullet,
                                           turretBehaviour, wait)
 import           RogueTrooper.Engine     (World (..), applyEvents, integrate,
                                           resolveTowerHits, step)
@@ -34,6 +35,9 @@ bulletAt i p v = Entity i (Projectile (StraightBullet v)) (Box p (Circle 4)) v 1
 
 directorWith :: Script () -> Entity
 directorWith scr = Entity (EntityId 5) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 scr
+
+companionAt :: EntityId -> Vector2 -> Script () -> Entity
+companionAt i p scr = Entity i Companion (Box p (Circle 10)) (Vector2 0 0) 1 scr
 
 testProjectile :: ProjectileType -> Vector2 -> Entity
 testProjectile pt origin = case pt of
@@ -208,17 +212,17 @@ main = hspec $ do
           gs' = step (worldWith []) gs
       Map.member (EntityId 2) gs'.entities `shouldBe` False
 
-  describe "turret firing (homing missile)" $ do
+  describe "turret firing (primary straight bullet)" $ do
     let towerP       = Vector2 640 620
         turretE      = turretAt (EntityId 0) (Vector2 100 100) 60
         worldWith es = (testWorld 0.016 (Vector2 100 100) towerP) { enemyList = es }
-    it "fires a missile at a locked target in the scanbox" $ do
+    it "fires a ballistic bullet toward the scanbox (player-aimed)" $ do
+      let gs' = step (worldWith []) (mkGameState [turretE] towerP 10)
+      length (projectilesOf gs') `shouldBe` 1
+    it "fires regardless of whether an enemy is in the scanbox (no auto-lock)" $ do
       let gs' = step (worldWith [(EntityId 1, Vector2 110 110, Vector2 0 0)])
                      (mkGameState [turretE, mkEnemyAt (EntityId 1) (Vector2 110 110)] towerP 10)
       length (projectilesOf gs') `shouldBe` 1
-    it "holds fire when there is no target in the scanbox" $ do
-      let gs' = step (worldWith []) (mkGameState [turretE] towerP 10)
-      length (projectilesOf gs') `shouldBe` 0
 
   describe "homingMissile" $ do
     let towerP       = Vector2 640 620
@@ -242,6 +246,37 @@ main = hspec $ do
       let m   = missile (EntityId 2) (Vector2 300 300) (EntityId 99) (Vector2 200 0)
           gs' = step (worldWith []) (mkGameState [m] towerP 10)
       velOf (EntityId 2) gs' `shouldSatisfy` maybe False (\(Vector2 vx _) -> vx > 200)
+
+  describe "nearestEnemy" $ do
+    it "returns Nothing when there are no enemies" $
+      nearestEnemy (Vector2 0 0) [] `shouldBe` Nothing
+    it "returns the enemy closest to the origin point" $
+      nearestEnemy (Vector2 0 0) [(EntityId 1, Vector2 5 0), (EntityId 2, Vector2 1 0)]
+        `shouldBe` Just (EntityId 2, Vector2 1 0)
+
+  describe "shotgunCompanion" $ do
+    let towerP       = Vector2 640 620
+        comp         = companionAt (EntityId 0) (Vector2 500 624) shotgunCompanion
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+    it "fires a burst of pellets at the closest enemy" $ do
+      let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
+                     (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
+      length (projectilesOf gs') `shouldBe` 5
+    it "holds fire when there are no enemies" $ do
+      let gs' = step (worldWith []) (mkGameState [comp] towerP 10)
+      length (projectilesOf gs') `shouldBe` 0
+
+  describe "missileCompanion" $ do
+    let towerP       = Vector2 640 620
+        comp         = companionAt (EntityId 0) (Vector2 500 624) missileCompanion
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+    it "launches a single homing missile at an enemy" $ do
+      let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
+                     (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
+      length (projectilesOf gs') `shouldBe` 1
+    it "holds fire when there are no enemies" $ do
+      let gs' = step (worldWith []) (mkGameState [comp] towerP 10)
+      length (projectilesOf gs') `shouldBe` 0
 
   describe "wait + spawnEnemyAt (sequential mission scripting)" $ do
     let world = testWorld 0.1 (Vector2 0 0) (Vector2 640 620)

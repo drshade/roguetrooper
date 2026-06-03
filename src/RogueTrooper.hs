@@ -17,10 +17,11 @@ import           Raylib.Types            (Color, Vector2, pattern Rectangle,
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
 import           RogueTrooper.Aim        (nearestInBox)
-import           RogueTrooper.Art        (drawSprite, paratrooperSprite, renderMissile,
-                                          renderTurret, trooperSprite)
+import           RogueTrooper.Art        (companionSprite, drawSprite, paratrooperSprite,
+                                          renderMissile, renderTurret, trooperSprite)
 import           RogueTrooper.Behaviours (enemyBehaviour, groundLevel, homingMissile,
-                                          missionDirector, straightBullet,
+                                          missileCompanion, missionDirector,
+                                          shotgunCompanion, straightBullet,
                                           turretBehaviour)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..),
@@ -39,15 +40,24 @@ worldGravity = Vector2 0 900
 initialState :: GameState
 initialState =
   GameState
-    { entities = Map.fromList [(EntityId 0, turret), (EntityId 1, director)]
+    { entities = Map.fromList
+        [ (EntityId 0, turret)
+        , (EntityId 1, director)
+        , (EntityId 2, companionL)
+        , (EntityId 3, companionR)
+        ]
     , tower    = Vector2 640 620   -- just above the ground line
     , towerHp  = 10
     , score    = 0
-    , nextId   = 2
+    , nextId   = 4
     }
   where
-    turret   = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
-    director = Entity (EntityId 1) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 missionDirector
+    turret     = Entity (EntityId 0) Turret (Box (Vector2 640 360) (Circle 60)) (Vector2 0 0) 1 turretBehaviour
+    director   = Entity (EntityId 1) Director (Box (Vector2 0 0) (Circle 0)) (Vector2 0 0) 1 missionDirector
+    -- two autonomous companion turrets flanking the tower (hardcoded for now;
+    -- the upgrade/slot-picking system is deferred)
+    companionL = Entity (EntityId 2) Companion (Box (Vector2 500 624) (Circle 10)) (Vector2 0 0) 1 missileCompanion
+    companionR = Entity (EntityId 3) Companion (Box (Vector2 780 624) (Circle 10)) (Vector2 0 0) 1 shotgunCompanion
 
 -- | Content-side projectile factory handed to the engine: map a 'ProjectileType'
 -- to an assembled entity (its kind, behaviour script, shape). The engine assigns
@@ -101,6 +111,7 @@ renderGround =
 renderEntity :: Entity -> IO ()
 renderEntity e = case e.kind of
   Turret                         -> renderBox Colors.lime e.box   -- scanbox reticle
+  Companion                      -> drawSprite e.box.center companionSprite
   Enemy                          -> do
     let Vector2 _ y = e.box.center
     drawSprite e.box.center (if y >= groundLevel then trooperSprite else paratrooperSprite)

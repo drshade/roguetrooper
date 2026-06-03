@@ -32,7 +32,8 @@ data Box = Box
 -- carry their 'ProjectileType' (the old @Bullet@ wrapper is gone; a bullet is
 -- just an entity).
 data EntityKind
-  = Turret
+  = Turret               -- ^ the player's main turret (the scanbox reticle)
+  | Companion            -- ^ an autonomous companion turret beside the main one
   | Enemy
   | Projectile ProjectileType
   | Director              -- ^ an invisible, non-physical script carrier (the mission)

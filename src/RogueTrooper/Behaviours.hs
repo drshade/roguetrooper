@@ -3,11 +3,13 @@
 module RogueTrooper.Behaviours
   ( module RogueTrooper.Behaviours.Common
   , module RogueTrooper.Behaviours.Weapon
+  , module RogueTrooper.Behaviours.Companion
   , module RogueTrooper.Behaviours.Enemy
   , module RogueTrooper.Behaviours.Mission
   ) where
 
 import RogueTrooper.Behaviours.Common
+import RogueTrooper.Behaviours.Companion
 import RogueTrooper.Behaviours.Enemy
 import RogueTrooper.Behaviours.Mission
 import RogueTrooper.Behaviours.Weapon

@@ -9,11 +9,16 @@ module RogueTrooper.Behaviours.Common
   , seekAt
   , wait
   , launchToHit
+  , launchToward
+  , nearestEnemy
+  , lcg
+  , randFloat
+  , randIndex
   ) where
 
 import           Raylib.Types        (Vector2, pattern Vector2)
-import           Raylib.Util.Math    (magnitude, vectorNormalize, (|*), (|-|))
-import           RogueTrooper.Script (Script, getDt, getMyPos, setVel, steer, yield)
+import           Raylib.Util.Math    (magnitude, vectorDistance, vectorNormalize, (|*), (|-|))
+import           RogueTrooper.Script (EntityId, Script, getDt, getMyPos, setVel, steer, yield)
 
 -- | The y coordinate of the ground line (raylib screen coords: y grows down).
 groundLevel :: Float
@@ -85,3 +90,26 @@ launchToHit speed g (Vector2 ox oy) (Vector2 tx ty)
                              vx = dx / t
                              vy = (dy - 0.5 * g * t * t) / t
                           in Just (Vector2 vx vy)
+
+-- | A velocity of magnitude @speed@ pointing from @from@ toward @to@ (up if they coincide).
+launchToward :: Vector2 -> Vector2 -> Float -> Vector2
+launchToward from to speed
+  | vectorDistance from to < 1 = Vector2 0 (negate speed)
+  | otherwise                  = vectorNormalize (to |-| from) |* speed
+
+-- | The enemy nearest a point (id + position), if any.
+nearestEnemy :: Vector2 -> [(EntityId, Vector2)] -> Maybe (EntityId, Vector2)
+nearestEnemy _    [] = Nothing
+nearestEnemy from es = Just (minimumBy (\(_, a) (_, b) -> compare (vectorDistance from a) (vectorDistance from b)) es)
+
+-- | A deterministic LCG step (glibc constants), kept in [0, 2^31).
+lcg :: Int -> Int
+lcg s = (1103515245 * s + 12345) `mod` 2147483648
+
+-- | Advance the seed and return a Float in [0, 1).
+randFloat :: Int -> (Float, Int)
+randFloat seed = let s = lcg seed in (fromIntegral (s `mod` 100000) / 100000, s)
+
+-- | Advance the seed and return an index in [0, n).
+randIndex :: Int -> Int -> (Int, Int)
+randIndex seed n = let s = lcg seed in (s `mod` n, s)

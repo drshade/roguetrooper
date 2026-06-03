@@ -4,19 +4,20 @@ module RogueTrooper.Behaviours.Weapon
   , straightBullet
   , homingMissile
   , bulletSpeed
+  , missileLaunchSpeed
   ) where
 
 import           Raylib.Types                   (Vector2, pattern Vector2)
 import           Raylib.Util.Math               (magnitude, vectorDistance,
                                                  vectorNormalize, (|*), (|-|))
-import           RogueTrooper.Behaviours.Common (offScreen, onLand, seekAt)
+import           RogueTrooper.Behaviours.Common (launchToHit, launchToward,
+                                                 offScreen, onLand, seekAt)
 import           RogueTrooper.Script            (EntityId, ProjectileType (..),
                                                  Script, damage, despawnSelf,
                                                  fire, getAimPos, getDt,
                                                  getEnemies, getEntityPos,
-                                                 getMyPos, getMyVel,
-                                                 getTargetInBox, getTowerPos,
-                                                 push, steer, yield)
+                                                 getGravity, getMyPos, getMyVel,
+                                                 getTowerPos, push, steer, yield)
 
 -- Turret ---------------------------------------------------------------------
 
@@ -28,9 +29,9 @@ scanSpeed = 900
 fireInterval :: Float
 fireInterval = 0.3
 
--- | The turret: the scanbox tracks the crosshair; every cooldown it locks the
--- nearest enemy inside the scanbox and launches a homing missile at it (holding
--- fire when there's no lock). The scanbox is a non-physical reticle.
+-- | The main turret: the scanbox tracks the crosshair, and every cooldown it
+-- fires its primary weapon (a ballistic straight bullet) at where the scanbox
+-- points — player-aimed, no auto-lock. The scanbox is a non-physical reticle.
 turretBehaviour :: Script ()
 turretBehaviour = turret 0
   where
@@ -40,23 +41,18 @@ turretBehaviour = turret 0
       cooldown' <-
         if cooldown <= 0
           then do
-            target <- getTargetInBox
-            case target of
-              Just (tid, tpos) -> do
-                tower <- getTowerPos
-                fire tower (HomingMissile tid (launchToward tower tpos missileLaunchSpeed))
-                pure fireInterval
-              Nothing -> pure cooldown                     -- no lock: hold fire
+            tower <- getTowerPos
+            scan  <- getMyPos                              -- scanbox centre = where we point
+            g     <- getGravity
+            let Vector2 _ gy = g
+                -- ballistic solution that lands on the scanbox; straight shot if out of range
+                v = maybe (launchToward tower scan bulletSpeed) id (launchToHit bulletSpeed gy tower scan)
+            fire tower (StraightBullet v)
+            pure fireInterval
           else pure cooldown
       dt <- getDt
       yield
       turret (cooldown' - dt)
-
--- | A velocity of magnitude @speed@ pointing from @from@ toward @to@.
-launchToward :: Vector2 -> Vector2 -> Float -> Vector2
-launchToward from to speed
-  | vectorDistance from to < 1 = Vector2 0 (negate speed)
-  | otherwise                  = vectorNormalize (to |-| from) |* speed
 
 -- Straight bullet (a flatter, faster ballistic round) ------------------------
 
