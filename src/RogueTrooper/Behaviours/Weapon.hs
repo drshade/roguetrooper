@@ -62,14 +62,16 @@ turretBehaviour = turret 0
 
 -- Flamethrower ---------------------------------------------------------------
 
--- | flameRange = how far particles reach (px); flameSpeed = their muzzle speed;
+-- | flameRange = how far particles reach on average (px); flameRangeJitter =
+-- per-particle ± variation on that reach; flameSpeed = their muzzle speed;
 -- flameArc = full cone width (radians); flameInterval = seconds between puffs;
 -- flameParticlesPerPuff = particles emitted each puff.
-flameRange, flameSpeed, flameArc, flameInterval :: Float
-flameRange    = 300
-flameSpeed    = 700
-flameArc      = 0.44                 -- ~25°
-flameInterval = 0.035
+flameRange, flameRangeJitter, flameSpeed, flameArc, flameInterval :: Float
+flameRange       = 450
+flameRangeJitter = 50
+flameSpeed       = 700
+flameArc         = 0.44              -- ~25°
+flameInterval    = 0.035
 
 flameParticlesPerPuff :: Int
 flameParticlesPerPuff = 4
@@ -93,9 +95,9 @@ flamethrowerTurret seed0 = turret seed0 0
           then do
             tower <- getTowerPos
             scan  <- getMyPos
-            let dir        = aimUnit (scan |-| tower)
-                (vels, s') = flamePuff seed dir flameParticlesPerPuff
-            mapM_ (\v -> fire tower (Flame v)) vels
+            let dir         = aimUnit (scan |-| tower)
+                (parts, s') = flamePuff seed dir flameParticlesPerPuff
+            mapM_ (\(v, r) -> fire tower (Flame v r)) parts
             pure (flameInterval, s')
           else pure (cooldown, seed)
       dt <- getDt
@@ -104,24 +106,28 @@ flamethrowerTurret seed0 = turret seed0 0
 
     aimUnit d = if magnitude d < 1 then Vector2 0 (-1) else vectorNormalize d
 
--- | @n@ flame velocities fanned within @flameArc@ of @dir@, each at a random
--- speed in [flameSpeedMin, 1] × 'flameSpeed'. Threads the RNG seed.
-flamePuff :: Int -> Vector2 -> Int -> ([Vector2], Int)
+-- | @n@ flame particles as (velocity, reach): each fanned within @flameArc@ of
+-- @dir@, at a random speed in [flameSpeedMin, 1] × 'flameSpeed', and a random
+-- reach of 'flameRange' ± 'flameRangeJitter'. Threads the RNG seed.
+flamePuff :: Int -> Vector2 -> Int -> ([(Vector2, Float)], Int)
 flamePuff seed0 dir n = go seed0 n []
   where
     go s 0 acc = (acc, s)
     go s k acc =
       let (u1, s1) = randFloat s
           (u2, s2) = randFloat s1
+          (u3, s3) = randFloat s2
           ang = (u1 * 2 - 1) * (flameArc / 2)
           spd = flameSpeed * (flameSpeedMin + (1 - flameSpeedMin) * u2)
-       in go s2 (k - 1) (vector2Rotate dir ang |* spd : acc)
+          rng = flameRange + (u3 * 2 - 1) * flameRangeJitter
+       in go s3 (k - 1) ((vector2Rotate dir ang |* spd, rng) : acc)
 
 -- | A flame particle: flies straight at its launch velocity (kinematic — no
 -- gravity droop), burning the first enemy it touches for a little damage (no
--- knockback). Expires after 'flameRange' worth of travel or off-screen.
-flameParticle :: Vector2 -> Script ()
-flameParticle vel = burn (flameRange / flameSpeed)
+-- knockback). Travels @range@ px (lifetime scaled to its own speed) then expires
+-- — or expires off-screen.
+flameParticle :: Vector2 -> Float -> Script ()
+flameParticle vel reach = burn (reach / max 1 (magnitude vel))
   where
     burn life = do
       setVel vel                                           -- hold a straight line

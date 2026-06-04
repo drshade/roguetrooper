@@ -88,7 +88,7 @@ mkProjectile pt origin = case pt of
   Pellet v            -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 2)) v 1 pellet
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
   RepulsorWave waveOrigin -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave waveOrigin)
-  Flame v             -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v)
+  Flame v r           -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v r)
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
 -- have 3 hit points.
@@ -141,7 +141,7 @@ renderEntity e = case e.kind of
   Projectile (Pellet _)          -> renderBox Colors.orange e.box
   Projectile (HomingMissile _ _) -> renderMissile e.box.center e.vel
   Projectile (RepulsorWave waveOrigin) -> renderBox Colors.skyBlue (e.box { center = waveOrigin })
-  Projectile (Flame _)           -> renderFlame e.box
+  Projectile (Flame _ _)         -> renderFlame e.box
   Director                       -> pure ()                       -- invisible mission script
 
 -- | Draw a flame particle: a small filled orange blob.

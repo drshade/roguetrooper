@@ -48,7 +48,7 @@ data ProjectileType
   | Pellet Vector2                  -- ^ a small shotgun pellet: like a bullet but smaller and weaker
   | HomingMissile EntityId Vector2  -- ^ homes on the target enemy; launched with this initial velocity
   | RepulsorWave Vector2            -- ^ a non-damaging pulse that expands from this origin, shoving enemies outward
-  | Flame Vector2                   -- ^ a short-lived flamethrower particle flying straight at this velocity
+  | Flame Vector2 Float             -- ^ a flamethrower particle flying straight at this velocity, reaching this distance
   deriving (Eq, Show)
 
 -- | The instruction set. Grows on demand as behaviours need new verbs.

@@ -50,7 +50,7 @@ testProjectile pt origin = case pt of
   Pellet v            -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 2)) v 1 pellet
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
   RepulsorWave o      -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave o)
-  Flame v             -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v)
+  Flame v r           -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v r)
 
 testEnemyFactory :: Vector2 -> Entity
 testEnemyFactory p = Entity (EntityId 0) Enemy (Box p (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
@@ -253,7 +253,7 @@ main = hspec $ do
   describe "flameParticle" $ do
     let towerP       = Vector2 640 620
         worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
-        flame i p v  = Entity i (Projectile (Flame v)) (Box p (Circle 5)) v 1 (flameParticle v)
+        flame i p v  = Entity i (Projectile (Flame v 450)) (Box p (Circle 5)) v 1 (flameParticle v 450)
     it "burns an overlapping enemy a little, then despawns (no knockback)" $ do
       let enemyP = Vector2 500 500
           gs     = mkGameState [mkEnemyAt (EntityId 1) enemyP, flame (EntityId 2) enemyP (Vector2 700 0)] towerP 10
