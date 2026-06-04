@@ -7,6 +7,7 @@ module RogueTrooper.Behaviours.Weapon
   , homingMissile
   , flameParticle
   , repulsorWave
+  , boomerang
   , bulletSpeed
   , missileLaunchSpeed
   ) where
@@ -14,7 +15,7 @@ module RogueTrooper.Behaviours.Weapon
 import           Raylib.Types                   (Vector2, pattern Vector2)
 import           Raylib.Util.Math               (magnitude, vector2Rotate,
                                                  vectorDistance, vectorNormalize,
-                                                 (|*), (|-|))
+                                                 (|*), (|+|), (|-|))
 import           RogueTrooper.Behaviours.Common (launchToHit, launchToward,
                                                  offScreen, onLand, randFloat, seekAt)
 import           RogueTrooper.Script            (EntityId, ProjectileType (..),
@@ -289,3 +290,45 @@ shoveFrom :: Vector2 -> Vector2 -> Float -> Vector2
 shoveFrom from target strength =
   let d = target |-| from
    in if magnitude d < 1 then Vector2 0 (negate strength) else vectorNormalize d |* strength
+
+-- Boomerang ------------------------------------------------------------------
+
+-- | boomerangForwardReach = how far it travels along its throw axis (px, max at
+-- mid-flight); boomerangLateralReach = how far it swings perpendicular (the S);
+-- boomerangFlightTime = seconds for the whole out-and-back; boomerangHitRadius =
+-- its (large) hitbox; boomerangKnockback = how hard it flings what it carves.
+boomerangForwardReach, boomerangLateralReach, boomerangFlightTime, boomerangHitRadius, boomerangKnockback :: Float
+boomerangForwardReach = 600
+boomerangLateralReach = 320
+boomerangFlightTime   = 2.0
+boomerangHitRadius    = 42
+boomerangKnockback    = 320
+
+boomerangDamage :: Int
+boomerangDamage = 2
+
+-- | A large boomerang flung along @axis@ that traces a wide S and returns to
+-- where it was thrown. Position would be @axis·R·sin(πt) + perp·L·sin(2πt)@; we
+-- emit its derivative as the velocity each frame (kinematic), so it integrates
+-- to that path and lands back at the origin (both sines vanish at t=0 and t=T).
+-- @side@ (±1) mirrors the S. It carves every enemy it sweeps over once (tracked
+-- in @hit@): damage + knockback along its travel. Despawns when the flight ends.
+boomerang :: Vector2 -> Float -> Script ()
+boomerang axis side = fly 0 []
+  where
+    Vector2 ax ay = axis
+    perp = Vector2 (negate ay * side) (ax * side)          -- axis rotated 90° (sign = S side)
+    fly elapsed hit = do
+      let ph  = elapsed / boomerangFlightTime
+          fwd = axis |* (boomerangForwardReach * (pi / boomerangFlightTime) * cos (pi * ph))
+          lat = perp |* (boomerangLateralReach * (2 * pi / boomerangFlightTime) * cos (2 * pi * ph))
+          v   = fwd |+| lat
+      setVel v                                             -- kinematic: drive the analytic path
+      me <- getMyPos
+      es <- getEnemies
+      let fresh = [ (i, p) | (i, p) <- es, i `notElem` hit, vectorDistance me p <= boomerangHitRadius ]
+      mapM_ (\(i, _) -> damage i boomerangDamage >> push i (impulseAlong boomerangKnockback v)) fresh
+      dt <- getDt
+      if elapsed + dt >= boomerangFlightTime
+        then despawnSelf
+        else yield >> fly (elapsed + dt) (hit <> map fst fresh)

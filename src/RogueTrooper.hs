@@ -18,11 +18,13 @@ import           Raylib.Types            (Color, Vector2, pattern Rectangle,
 import           Raylib.Util             (drawing, whileWindowOpen_, withWindow)
 import qualified Raylib.Util.Colors      as Colors
 import           RogueTrooper.Art        (companionSprite, drawSprite, paratrooperSprite,
-                                          renderMissile, renderTurret, trooperSprite)
-import           RogueTrooper.Behaviours (enemyBehaviour, flameParticle, flamethrowerTurret,
-                                          groundLevel, homingMissile, missileCompanion,
-                                          missionDirector, pellet, repulsorCompanion,
-                                          repulsorWave, shotgunCompanion, straightBullet)
+                                          renderBoomerang, renderMissile, renderTurret,
+                                          trooperSprite)
+import           RogueTrooper.Behaviours (boomerang, boomerangCompanion, enemyBehaviour,
+                                          flameParticle, flamethrowerTurret, groundLevel,
+                                          homingMissile, missileCompanion, missionDirector,
+                                          pellet, repulsorCompanion, repulsorWave,
+                                          shotgunCompanion, straightBullet)
 import           RogueTrooper.Engine     (World (..), step)
 import           RogueTrooper.Script     (Script)
 import           RogueTrooper.Types      (Box (..), BoxShape (..), Entity (..),
@@ -48,6 +50,7 @@ companionLoadout =
   [ missileCompanion 7777
   , shotgunCompanion 3131
   , repulsorCompanion
+  , boomerangCompanion
   ]
 
 -- | The equipped primary weapon — the main turret's player-aimed gun. Swap this
@@ -89,6 +92,7 @@ mkProjectile pt origin = case pt of
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
   RepulsorWave waveOrigin -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave waveOrigin)
   Flame v r           -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v r)
+  Boomerang axis side -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 42)) (Vector2 0 0) 1 (boomerang axis side)
 
 -- | Content-side enemy factory handed to the engine's spawner. Normal enemies
 -- have 3 hit points.
@@ -142,6 +146,7 @@ renderEntity e = case e.kind of
   Projectile (HomingMissile _ _) -> renderMissile e.box.center e.vel
   Projectile (RepulsorWave waveOrigin) -> renderBox Colors.skyBlue (e.box { center = waveOrigin })
   Projectile (Flame _ _)         -> renderFlame e.box
+  Projectile (Boomerang _ _)     -> renderBoomerang e.box.center e.vel
   Director                       -> pure ()                       -- invisible mission script
 
 -- | Draw a flame particle: a small filled orange blob.

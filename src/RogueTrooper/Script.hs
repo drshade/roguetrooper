@@ -49,6 +49,7 @@ data ProjectileType
   | HomingMissile EntityId Vector2  -- ^ homes on the target enemy; launched with this initial velocity
   | RepulsorWave Vector2            -- ^ a non-damaging pulse that expands from this origin, shoving enemies outward
   | Flame Vector2 Float             -- ^ a flamethrower particle flying straight at this velocity, reaching this distance
+  | Boomerang Vector2 Float         -- ^ a large boomerang flung along this axis; the Float (±1) picks the S's side
   deriving (Eq, Show)
 
 -- | The instruction set. Grows on demand as behaviours need new verbs.

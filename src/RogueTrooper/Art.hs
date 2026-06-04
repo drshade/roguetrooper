@@ -6,12 +6,13 @@ module RogueTrooper.Art
   , drawSprite
   , renderTurret
   , renderMissile
+  , renderBoomerang
   , companionSprite
   , paratrooperSprite
   , trooperSprite
   ) where
 
-import           Raylib.Core.Shapes  (drawRectanglePro, drawRectangleV)
+import           Raylib.Core.Shapes  (drawCircleV, drawRectanglePro, drawRectangleV)
 import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern Vector2)
 import qualified Raylib.Util.Colors  as Colors
 import           Raylib.Util.Math    ((|-|))
@@ -79,6 +80,16 @@ renderMissile (Vector2 cx cy) (Vector2 vx vy) = do
   seg 4 4 13   Colors.gold     -- exhaust flame at the tail
   seg 16 6 8   Colors.gray     -- body
   seg 6 6 (-2) Colors.orange   -- nose, forward
+
+-- | A large boomerang: two crossed blades + a hub, oriented by its velocity (so
+-- it appears to rotate as it sweeps the S).
+renderBoomerang :: Vector2 -> Vector2 -> IO ()
+renderBoomerang (Vector2 cx cy) (Vector2 vx vy) = do
+  let angle = if vx == 0 && vy == 0 then 0 else atan2 vy vx * 180 / pi
+      blade off = drawRectanglePro (Rectangle cx cy 72 16) (Vector2 36 8) (angle + off) Colors.violet
+  blade 0
+  blade 90
+  drawCircleV (Vector2 cx cy) 9 Colors.darkPurple
 
 -- | A small autonomous companion turret (distinct from the main turret).
 companionSprite :: Sprite

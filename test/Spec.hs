@@ -2,12 +2,12 @@ module Main where
 
 import qualified Data.Map.Strict     as Map
 import           RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import           RogueTrooper.Behaviours (enemyBehaviour, flameParticle, flamethrowerTurret,
-                                          groundLevel, homingMissile, launchToHit,
-                                          missileCompanion, missionDirector, nearestEnemy,
-                                          pellet, repulsorCompanion, repulsorWave,
-                                          shotgunCompanion, straightBullet, turretBehaviour,
-                                          wait)
+import           RogueTrooper.Behaviours (boomerang, boomerangCompanion, enemyBehaviour,
+                                          flameParticle, flamethrowerTurret, groundLevel,
+                                          homingMissile, launchToHit, missileCompanion,
+                                          missionDirector, nearestEnemy, pellet,
+                                          repulsorCompanion, repulsorWave, shotgunCompanion,
+                                          straightBullet, turretBehaviour, wait)
 import           RogueTrooper.Engine     (World (..), applyEvents, integrate,
                                           resolveTowerHits, step)
 import           RogueTrooper.Script     (Script, spawnEnemyAt)
@@ -51,6 +51,7 @@ testProjectile pt origin = case pt of
   HomingMissile tid v -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) v 1 (homingMissile tid)
   RepulsorWave o      -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave o)
   Flame v r           -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v r)
+  Boomerang axis side -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 42)) (Vector2 0 0) 1 (boomerang axis side)
 
 testEnemyFactory :: Vector2 -> Entity
 testEnemyFactory p = Entity (EntityId 0) Enemy (Box p (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
@@ -341,6 +342,32 @@ main = hspec $ do
         comp         = companionAt (EntityId 0) (Vector2 500 624) repulsorCompanion
         worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
     it "emits a repulsion wave when enemies are present" $ do
+      let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
+                     (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
+      length (projectilesOf gs') `shouldBe` 1
+    it "holds when there are no enemies" $ do
+      let gs' = step (worldWith []) (mkGameState [comp] towerP 10)
+      length (projectilesOf gs') `shouldBe` 0
+
+  describe "boomerang" $ do
+    let towerP       = Vector2 640 620
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+        boom i p axis side = Entity i (Projectile (Boomerang axis side)) (Box p (Circle 42)) (Vector2 0 0) 1 (boomerang axis side)
+    it "carves an enemy it sweeps over (damage) on the first frame" $ do
+      let p   = Vector2 300 300
+          gs  = mkGameState [mkEnemyAt (EntityId 1) p, boom (EntityId 2) p (Vector2 0 (-1)) 1] towerP 10
+          gs' = step (worldWith [(EntityId 1, p, Vector2 0 0)]) gs
+      ((.hp) <$> Map.lookup (EntityId 1) gs'.entities) `shouldBe` Just 1   -- 2 damage
+    it "expires after its flight (returns home and is gone)" $ do
+      let gs  = mkGameState [boom (EntityId 2) (Vector2 300 300) (Vector2 0 (-1)) 1] towerP 10
+          gs' = stepN (worldWith []) 130 gs
+      length (projectilesOf gs') `shouldBe` 0
+
+  describe "boomerangCompanion" $ do
+    let towerP       = Vector2 640 620
+        comp         = companionAt (EntityId 0) (Vector2 500 624) boomerangCompanion
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+    it "flings a boomerang when enemies are present" $ do
       let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
                      (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
       length (projectilesOf gs') `shouldBe` 1

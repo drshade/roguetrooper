@@ -4,6 +4,7 @@ module RogueTrooper.Behaviours.Companion
   ( missileCompanion
   , shotgunCompanion
   , repulsorCompanion
+  , boomerangCompanion
   ) where
 
 import           Raylib.Types                   (Vector2, pattern Vector2)
@@ -17,10 +18,11 @@ import           RogueTrooper.Script            (ProjectileType (..), Script,
                                                  getMyPos, yield)
 
 -- | Cooldowns are longer than the main turret's (companions start weaker).
-missileCooldown, shotgunCooldown, repulsorCooldown :: Float
-missileCooldown  = 3.0
-shotgunCooldown  = 1.6
-repulsorCooldown = 2.2
+missileCooldown, shotgunCooldown, repulsorCooldown, boomerangCooldown :: Float
+missileCooldown   = 3.0
+shotgunCooldown   = 1.6
+repulsorCooldown  = 2.2
+boomerangCooldown = 2.6
 
 -- | Shotgun: a burst of pellets sprayed into a randomized oval cloud leaving
 -- the muzzle.
@@ -101,6 +103,31 @@ repulsorCompanion = run 0
       dt <- getDt
       yield
       run (cooldown' - dt)
+
+-- | Boomerang companion: every cooldown (when enemies are present) it flings a
+-- large boomerang in a random upward-ish direction with a random S-side. It does
+-- not target a specific enemy — it's a wide sweep that carves whatever it crosses.
+boomerangCompanion :: Script ()
+boomerangCompanion = go 24680 0
+  where
+    go seed cooldown = do
+      me <- getMyPos
+      es <- getEnemies
+      (cooldown', seed') <-
+        if cooldown <= 0 && not (null es)
+          then do
+            let (u1, s1) = randFloat seed
+                (u2, s2) = randFloat s1
+                -- upper arc only (never near-horizontal or downward): ~[-0.85π, -0.15π]
+                ang  = negate (0.15 * pi + u1 * 0.7 * pi)
+                axis = Vector2 (cos ang) (sin ang)
+                side = if u2 < 0.5 then 1 else -1
+            fire me (Boomerang axis side)
+            pure (boomerangCooldown, s2)
+          else pure (cooldown, seed)
+      dt <- getDt
+      yield
+      go seed' (cooldown' - dt)
 
 -- | @n@ randomized velocities forming an oval "muzzle cloud" around the base
 -- shot @dir |* speed@. Each pellet draws a uniform-random point inside the unit
