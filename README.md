@@ -153,6 +153,104 @@ two-state machine (parachute-descent while airborne via `steer`; walk to the tow
 `onLand`), and `missionDirector` is the sequential counterpart — drop N troopers at
 deterministic-random positions, `wait` between drops and rounds, escalate, idle.
 
+## A worked example: single bullet vs. flamethrower
+
+These are the two primary weapons, *verbatim from the source* (only the comments are added).
+They share an identical skeleton — track the crosshair, count down a cooldown, fire, `yield`,
+recurse — yet produce completely different weapons. Read them side by side; the only things that
+differ are what happens inside the `fire` block.
+
+```haskell
+-- A single gravity-corrected round on a slow cadence.
+turretBehaviour :: Script ()
+turretBehaviour = turret 0                          -- start with no cooldown
+  where
+    turret cooldown = do
+      aim <- getAimPos                              -- query: where is the crosshair?
+      seekAt scanSpeed aim                          -- command: turn toward it (lags, finite speed)
+      cooldown' <-
+        if cooldown <= 0
+          then do
+            tower <- getTowerPos
+            scan  <- getMyPos                        -- the barrel points where the reticle sits
+            g     <- getGravity
+            let Vector2 _ gy = g
+                -- solve the ballistic arc that LANDS on the aim point; straight shot if out of range
+                v = maybe (launchToward tower scan bulletSpeed) id
+                          (launchToHit bulletSpeed gy tower scan)
+            fire tower (StraightBullet v)            -- effect: spawn ONE round
+            pure fireInterval                        -- ...and reset the (long) cooldown
+          else pure cooldown
+      dt <- getDt
+      yield                                          -- suspend until next frame
+      turret (cooldown' - dt)                        -- resume with the cooldown wound down
+```
+
+```haskell
+-- A spray of short-lived particles on a fast cadence. Note the threaded RNG seed.
+flamethrowerTurret :: Int -> Script ()
+flamethrowerTurret seed0 = turret seed0 0
+  where
+    turret seed cooldown = do
+      aim   <- getAimPos
+      seekAt scanSpeed aim                           -- SAME aiming as the bullet turret
+      (cooldown', seed') <-
+        if cooldown <= 0
+          then do
+            tower <- getTowerPos
+            scan  <- getMyPos
+            let dir         = aimUnit (scan |-| tower)
+                -- build N particles fanned in a cone, varying angle/speed/reach; thread the seed
+                (parts, s') = flamePuff seed dir flameParticlesPerPuff
+            mapM_ (\(v, r) -> fire tower (Flame v r)) parts   -- effect: spawn MANY particles
+            pure (flameInterval, s')                 -- ...and reset the (short) cooldown
+          else pure (cooldown, seed)
+      dt <- getDt
+      yield
+      turret seed' (cooldown' - dt)                  -- resume, carrying the advanced seed
+```
+
+The flamethrower needs randomness, so it carries an `Int` seed as an extra recursion argument
+and threads it through each puff — no engine support, no global RNG, just a parameter that rides
+the continuation. That's the leverage of behaviour-as-a-real-program: per-actor state, RNG, and
+control flow are all *just ordinary Haskell* in the script.
+
+The difference continues in the projectiles each one spawns — same `fly` shape, opposite physics:
+
+```haskell
+-- StraightBullet: a heavy round that obeys gravity and hits hard.
+ballistic dmg hitRadius knockback = fly
+  where
+    fly = do
+      me <- getMyPos
+      es <- getEnemies                               -- the projectile finds its OWN collisions
+      case [tid | (tid, p) <- es, vectorDistance me p <= hitRadius] of
+        tid : _ -> do
+          damage tid dmg
+          v <- getMyVel
+          push tid (impulseAlong knockback v)         -- knockback along travel
+          despawnSelf
+        []  | onLand me || offScreen me -> despawnSelf  -- gravity (from integrate) curves it down
+            | otherwise                 -> yield >> fly  -- ...so it eventually hits the ground
+
+-- Flame: a weightless particle that flies dead straight and fizzles out by distance.
+flameParticle vel reach = burn (reach / max 1 (magnitude vel))   -- lifetime derived from reach
+  where
+    burn life = do
+      setVel vel                                     -- HARD-SET velocity each frame: no gravity droop
+      me <- getMyPos
+      es <- getEnemies
+      case [tid | (tid, p) <- es, vectorDistance me p <= flameHitRadius] of
+        tid : _ -> damage tid flameDamage >> despawnSelf   -- little damage, no knockback
+        []  | life <= 0 || offScreen me -> despawnSelf     -- dies when it has travelled its reach
+            | otherwise -> do dt <- getDt; yield; burn (life - dt)
+```
+
+Same engine, same DSL, no special cases anywhere: the bullet lets `integrate` pull it down with
+gravity and checks for the ground; the flame `setVel`s a flat line every frame so gravity never
+accumulates, and self-destructs on a distance budget instead. Two genuinely different weapons,
+expressed entirely as content.
+
 ## Reusing the platform's primitives
 
 `RogueTrooper.Aim` composes `h-raylib`'s own vector math and collision checks into game logic
