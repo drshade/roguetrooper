@@ -2,12 +2,13 @@ module Main where
 
 import qualified Data.Map.Strict     as Map
 import           RogueTrooper.Aim        (boxContains, nearestInBox, seekToward)
-import           RogueTrooper.Behaviours (boomerang, boomerangCompanion, enemyBehaviour,
-                                          flameParticle, flamethrowerTurret, groundLevel,
-                                          homingMissile, launchToHit, missileCompanion,
-                                          missionDirector, nearestEnemy, pellet,
-                                          repulsorCompanion, repulsorWave, shotgunCompanion,
-                                          straightBullet, turretBehaviour, wait)
+import           RogueTrooper.Behaviours (boomerang, boomerangCompanion, chainTarget,
+                                          enemyBehaviour, flameParticle, flamethrowerTurret,
+                                          groundLevel, homingMissile, launchToHit,
+                                          missileCompanion, missionDirector, nearestEnemy,
+                                          pellet, repulsorCompanion, repulsorWave,
+                                          shotgunCompanion, straightBullet, teslaBolt,
+                                          teslaCompanion, turretBehaviour, wait)
 import           RogueTrooper.Engine     (World (..), applyEvents, integrate,
                                           resolveTowerHits, step)
 import           RogueTrooper.Script     (Script, spawnEnemyAt)
@@ -52,6 +53,7 @@ testProjectile pt origin = case pt of
   RepulsorWave o      -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 0)) (Vector2 0 0) 1 (repulsorWave o)
   Flame v r           -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 5)) v 1 (flameParticle v r)
   Boomerang axis side -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 42)) (Vector2 0 0) 1 (boomerang axis side)
+  TeslaBolt _ tid struck -> Entity (EntityId 0) (Projectile pt) (Box origin (Circle 6)) (Vector2 0 0) 1 (teslaBolt tid struck)
 
 testEnemyFactory :: Vector2 -> Entity
 testEnemyFactory p = Entity (EntityId 0) Enemy (Box p (Circle 12)) (Vector2 0 0) 3 enemyBehaviour
@@ -371,6 +373,71 @@ main = hspec $ do
       let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
                      (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
       length (projectilesOf gs') `shouldBe` 1
+    it "holds when there are no enemies" $ do
+      let gs' = step (worldWith []) (mkGameState [comp] towerP 10)
+      length (projectilesOf gs') `shouldBe` 0
+
+  describe "chainTarget (tesla hop selection)" $ do
+    it "picks the nearest enemy within bounce range" $
+      chainTarget 100 [] (Vector2 0 0) [(EntityId 1, Vector2 50 0), (EntityId 2, Vector2 30 0)]
+        `shouldBe` Just (EntityId 2, Vector2 30 0)
+    it "excludes enemies the chain already struck" $
+      chainTarget 100 [EntityId 2] (Vector2 0 0) [(EntityId 1, Vector2 50 0), (EntityId 2, Vector2 30 0)]
+        `shouldBe` Just (EntityId 1, Vector2 50 0)
+    it "returns Nothing when every candidate is out of range or struck" $
+      chainTarget 100 [EntityId 1] (Vector2 0 0) [(EntityId 1, Vector2 50 0), (EntityId 2, Vector2 500 0)]
+        `shouldBe` Nothing
+
+  describe "teslaBolt" $ do
+    let towerP       = Vector2 640 620
+        worldWith es = (testWorld 0.1 (Vector2 0 0) towerP) { enemyList = es }
+        boltAt i p tgt struck =
+          Entity i (Projectile (TeslaBolt (Vector2 500 624) tgt struck)) (Box p (Circle 6)) (Vector2 0 0) 1 (teslaBolt tgt struck)
+        aP = Vector2 300 300
+        a  = mkEnemyAt (EntityId 1) aP
+    it "strikes its target for 2 damage" $ do
+      let gs  = mkGameState [a, boltAt (EntityId 9) aP (EntityId 1) []] towerP 10
+          gs' = step (worldWith [(EntityId 1, aP, Vector2 0 0)]) gs
+      ((.hp) <$> Map.lookup (EntityId 1) gs'.entities) `shouldBe` Just 1
+    it "arcs to the nearest trooper in bounce range after the hop delay" $ do
+      let bP  = Vector2 400 300   -- 100px from the strike, within bounce range
+          gs  = mkGameState [a, mkEnemyAt (EntityId 2) bP, boltAt (EntityId 9) aP (EntityId 1) []] towerP 10
+          es  = [(EntityId 1, aP, Vector2 0 0), (EntityId 2, bP, Vector2 0 0)]
+          gs2 = stepN (worldWith es) 2 gs
+          gs3 = step (worldWith es) gs2
+      length (projectilesOf gs2) `shouldBe` 2                               -- second segment spawned
+      ((.hp) <$> Map.lookup (EntityId 2) gs3.entities) `shouldBe` Just 1    -- ...and it struck B
+    it "does not arc onward once the chain has used its 2 bounces" $ do
+      let bP  = Vector2 400 300
+          gs  = mkGameState [a, mkEnemyAt (EntityId 2) bP, boltAt (EntityId 9) aP (EntityId 1) [EntityId 98, EntityId 99]] towerP 10
+          es  = [(EntityId 1, aP, Vector2 0 0), (EntityId 2, bP, Vector2 0 0)]
+          gs3 = stepN (worldWith es) 3 gs
+      length (projectilesOf gs3) `shouldSatisfy` (<= 1)
+      ((.hp) <$> Map.lookup (EntityId 2) gs3.entities) `shouldBe` Just 3    -- B untouched
+    it "does not arc to a trooper beyond bounce range" $ do
+      let bP  = Vector2 800 300   -- 500px away, beyond bounce range
+          gs  = mkGameState [a, mkEnemyAt (EntityId 2) bP, boltAt (EntityId 9) aP (EntityId 1) []] towerP 10
+          es  = [(EntityId 1, aP, Vector2 0 0), (EntityId 2, bP, Vector2 0 0)]
+          gs2 = stepN (worldWith es) 2 gs
+      length (projectilesOf gs2) `shouldBe` 1
+    it "expires after its arc life" $ do
+      let gs  = mkGameState [a, boltAt (EntityId 9) aP (EntityId 1) []] towerP 10
+          gs' = stepN (worldWith [(EntityId 1, aP, Vector2 0 0)]) 5 gs
+      length (projectilesOf gs') `shouldBe` 0
+
+  describe "teslaCompanion" $ do
+    let towerP       = Vector2 640 620
+        comp         = companionAt (EntityId 0) (Vector2 500 624) (teslaCompanion 9090)
+        worldWith es = (testWorld 0.016 (Vector2 0 0) towerP) { enemyList = es }
+    it "strikes an enemy within its long range with a bolt" $ do
+      let gs' = step (worldWith [(EntityId 1, Vector2 400 400, Vector2 0 0)])
+                     (mkGameState [comp, mkEnemyAt (EntityId 1) (Vector2 400 400)] towerP 10)
+      length (projectilesOf gs') `shouldBe` 1
+    it "holds fire when no enemy is within range" $ do
+      let farP = Vector2 1300 50   -- ~980px from the coil, beyond its 750 range
+          gs'  = step (worldWith [(EntityId 1, farP, Vector2 0 0)])
+                      (mkGameState [comp, mkEnemyAt (EntityId 1) farP] towerP 10)
+      length (projectilesOf gs') `shouldBe` 0
     it "holds when there are no enemies" $ do
       let gs' = step (worldWith []) (mkGameState [comp] towerP 10)
       length (projectilesOf gs') `shouldBe` 0

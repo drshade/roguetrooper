@@ -7,15 +7,17 @@ module RogueTrooper.Art
   , renderTurret
   , renderMissile
   , renderBoomerang
+  , renderTeslaBolt
   , companionSprite
   , paratrooperSprite
   , trooperSprite
   ) where
 
-import           Raylib.Core.Shapes  (drawCircleV, drawRectanglePro, drawRectangleV)
+import           Raylib.Core.Shapes  (drawCircleV, drawLineV, drawRectanglePro,
+                                      drawRectangleV)
 import           Raylib.Types        (Color, Vector2, pattern Rectangle, pattern Vector2)
 import qualified Raylib.Util.Colors  as Colors
-import           Raylib.Util.Math    ((|-|))
+import           Raylib.Util.Math    (magnitude, vectorNormalize, (|*), (|+|), (|-|))
 
 -- | A pixel sprite: a palette mapping chars to colours, and rows of chars
 -- (' ' = transparent).
@@ -90,6 +92,24 @@ renderBoomerang (Vector2 cx cy) (Vector2 vx vy) = do
   blade 0
   blade 90
   drawCircleV (Vector2 cx cy) 9 Colors.darkPurple
+
+-- Tesla bolt -----------------------------------------------------------------
+
+-- | A lightning arc: a jagged polyline from the arc's source to the strike
+-- point (fixed alternating perpendicular kinks — deterministic, no RNG in
+-- render), with a bright flash at the strike point.
+renderTeslaBolt :: Vector2 -> Vector2 -> IO ()
+renderTeslaBolt from to = do
+  let d    = to |-| from
+      Vector2 dx dy = d
+      perp = if magnitude d < 1 then Vector2 0 0 else vectorNormalize (Vector2 (negate dy) dx)
+      kinks = [0, 12, -9, 14, -11, 7, 0]              -- px offsets at evenly spaced points
+      n    = length kinks - 1
+      pts  = [ from |+| (d |* (fromIntegral i / fromIntegral n)) |+| (perp |* k)
+             | (i, k) <- zip [0 :: Int ..] kinks
+             ]
+  sequence_ [drawLineV a b Colors.skyBlue | (a, b) <- zip pts (drop 1 pts)]
+  drawCircleV to 5 Colors.rayWhite
 
 -- | A small autonomous companion turret (distinct from the main turret).
 companionSprite :: Sprite

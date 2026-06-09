@@ -8,6 +8,9 @@ module RogueTrooper.Behaviours.Weapon
   , flameParticle
   , repulsorWave
   , boomerang
+  , teslaBolt
+  , chainTarget
+  , teslaBounceRange
   , bulletSpeed
   , missileLaunchSpeed
   ) where
@@ -17,7 +20,8 @@ import           Raylib.Util.Math               (magnitude, vector2Rotate,
                                                  vectorDistance, vectorNormalize,
                                                  (|*), (|+|), (|-|))
 import           RogueTrooper.Behaviours.Common (launchToHit, launchToward,
-                                                 offScreen, onLand, randFloat, seekAt)
+                                                 nearestEnemy, offScreen, onLand,
+                                                 randFloat, seekAt)
 import           RogueTrooper.Script            (EntityId, ProjectileType (..),
                                                  Script, damage, despawnSelf,
                                                  fire, getAimPos, getDt,
@@ -290,6 +294,59 @@ shoveFrom :: Vector2 -> Vector2 -> Float -> Vector2
 shoveFrom from target strength =
   let d = target |-| from
    in if magnitude d < 1 then Vector2 0 (negate strength) else vectorNormalize d |* strength
+
+-- Tesla bolt -----------------------------------------------------------------
+
+-- | teslaBounceRange = how far an arc can jump to the next trooper (px);
+-- teslaHopDelay = seconds a segment waits before arcing onward; teslaArcLife =
+-- how long each drawn arc lingers in total (a bit longer than the hop, so
+-- consecutive arcs overlap on screen).
+teslaBounceRange, teslaHopDelay, teslaArcLife :: Float
+teslaBounceRange = 280
+teslaHopDelay    = 0.1
+teslaArcLife     = 0.22
+
+teslaDamage :: Int
+teslaDamage = 2
+
+-- | How many times a chain may arc onward after the first strike.
+teslaMaxBounces :: Int
+teslaMaxBounces = 2
+
+-- | The chain's next hop: the enemy nearest @from@ within @range@ that isn't
+-- already in @excluded@ (Nothing ends the chain).
+chainTarget :: Float -> [EntityId] -> Vector2 -> [(EntityId, Vector2)] -> Maybe (EntityId, Vector2)
+chainTarget range excluded from es =
+  nearestEnemy from [e | e@(i, p) <- es, i `notElem` excluded, vectorDistance from p <= range]
+
+-- | One segment of a lightning chain, pinned where it struck. It damages its
+-- target instantly (no knockback — crowd control is the repulsor's job); after
+-- 'teslaHopDelay' it arcs onward to the nearest not-yet-struck enemy within
+-- 'teslaBounceRange' (re-evaluated live, so a trooper that died mid-chain is
+-- skipped) — until the chain has bounced 'teslaMaxBounces' times. @struck@ is
+-- who earlier segments already hit. The segment lingers to 'teslaArcLife' so
+-- consecutive arcs overlap, then despawns.
+teslaBolt :: EntityId -> [EntityId] -> Script ()
+teslaBolt target struck = do
+  damage target teslaDamage
+  linger teslaHopDelay
+  when (length struck < teslaMaxBounces) $ do
+    me <- getMyPos
+    es <- getEnemies
+    case chainTarget teslaBounceRange (target : struck) me es of
+      Just (tid, tpos) -> fire tpos (TeslaBolt me tid (target : struck))
+      Nothing          -> pure ()
+  linger (teslaArcLife - teslaHopDelay)
+  despawnSelf
+  where
+    -- like 'wait', but hard-holds position each frame (a bolt ignores gravity)
+    linger remaining
+      | remaining <= 0 = pure ()
+      | otherwise = do
+          setVel (Vector2 0 0)
+          dt <- getDt
+          yield
+          linger (remaining - dt)
 
 -- Boomerang ------------------------------------------------------------------
 

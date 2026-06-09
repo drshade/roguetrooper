@@ -5,11 +5,13 @@ module RogueTrooper.Behaviours.Companion
   , shotgunCompanion
   , repulsorCompanion
   , boomerangCompanion
+  , teslaCompanion
   ) where
 
 import           Raylib.Types                   (Vector2, pattern Vector2)
-import           Raylib.Util.Math               (magnitude, vectorNormalize,
-                                                 (|*), (|+|), (|-|))
+import           Raylib.Util.Math               (magnitude, vectorDistance,
+                                                 vectorNormalize, (|*), (|+|),
+                                                 (|-|))
 import           RogueTrooper.Behaviours.Common (launchToward, nearestEnemy,
                                                  randFloat, randIndex)
 import           RogueTrooper.Behaviours.Weapon (missileLaunchSpeed)
@@ -18,11 +20,17 @@ import           RogueTrooper.Script            (ProjectileType (..), Script,
                                                  getMyPos, yield)
 
 -- | Cooldowns are longer than the main turret's (companions start weaker).
-missileCooldown, shotgunCooldown, repulsorCooldown, boomerangCooldown :: Float
+missileCooldown, shotgunCooldown, repulsorCooldown, boomerangCooldown, teslaCooldown :: Float
 missileCooldown   = 3.0
 shotgunCooldown   = 1.6
 repulsorCooldown  = 2.2
 boomerangCooldown = 2.6
+teslaCooldown     = 4.5
+
+-- | How far the tesla coil can reach for its first strike (long — the chain's
+-- hops then use the bolt's own, shorter, bounce range).
+teslaRange :: Float
+teslaRange = 750
 
 -- | Shotgun: a burst of pellets sprayed into a randomized oval cloud leaving
 -- the muzzle.
@@ -128,6 +136,29 @@ boomerangCompanion = go 24680 0
       dt <- getDt
       yield
       go seed' (cooldown' - dt)
+
+-- | Tesla-coil companion: every (slow) cooldown it strikes a RANDOM enemy
+-- within its long range with a lightning bolt, which then arcs between nearby
+-- troopers on its own (see 'RogueTrooper.Behaviours.Weapon.teslaBolt'). The
+-- seed makes two of the same companion pick targets independently.
+teslaCompanion :: Int -> Script ()
+teslaCompanion seed0 = run seed0 0
+  where
+    run seed cooldown = do
+      me <- getMyPos
+      es <- getEnemies
+      let candidates = [e | e@(_, p) <- es, vectorDistance me p <= teslaRange]
+      (cooldown', seed') <-
+        if cooldown <= 0 && not (null candidates)
+          then do
+            let (i, seed'') = randIndex seed (length candidates)
+                (tid, tpos) = candidates !! i
+            fire tpos (TeslaBolt me tid [])
+            pure (teslaCooldown, seed'')
+          else pure (cooldown, seed)
+      dt <- getDt
+      yield
+      run seed' (cooldown' - dt)
 
 -- | @n@ randomized velocities forming an oval "muzzle cloud" around the base
 -- shot @dir |* speed@. Each pellet draws a uniform-random point inside the unit

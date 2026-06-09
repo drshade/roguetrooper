@@ -50,6 +50,7 @@ data ProjectileType
   | RepulsorWave Vector2            -- ^ a non-damaging pulse that expands from this origin, shoving enemies outward
   | Flame Vector2 Float             -- ^ a flamethrower particle flying straight at this velocity, reaching this distance
   | Boomerang Vector2 Float         -- ^ a large boomerang flung along this axis; the Float (±1) picks the S's side
+  | TeslaBolt Vector2 EntityId [EntityId] -- ^ one lightning-arc segment: from this point, striking this target; the list is who earlier segments already struck
   deriving (Eq, Show)
 
 -- | The instruction set. Grows on demand as behaviours need new verbs.
